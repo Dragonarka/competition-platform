@@ -1,0 +1,102 @@
+# generated: 2026-04-10
+# project: competition-platform
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-04-10
+project: competition-platform
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # ─── Epic 1: Platform Foundation & Organizer Onboarding ───
+  epic-1: done
+  1-1-monorepo-foundation-and-local-development-environment: done
+  1-2-organizer-account-creation-and-authentication: done
+  1-3-organizer-competition-dashboard-shell: done
+  epic-1-retrospective: optional
+
+  # ─── Epic 2: Competition Creation & Judge Access ───
+  epic-2: in-progress
+  2-1-create-a-competition: done
+  2-2-define-cypher-evaluation-criteria: backlog
+  2-3-register-participants: backlog
+  2-4-configure-judge-groups-and-advancement-rules: backlog
+  2-5-generate-and-share-judge-invite-links: backlog
+  epic-2-retrospective: optional
+
+  # ─── Epic 3: Live Cypher Scoring ───
+  epic-3: backlog
+  3-1-format-sdk-and-cypher-battles-format-definition: backlog
+  3-2-cypher-phase-start-and-judge-group-assignment: backlog
+  3-3-judge-scoring-interface-cypher-mode: backlog
+  3-4-real-time-score-aggregation-and-live-standings: backlog
+  3-5-offline-score-queue-and-connection-resilience: backlog
+  3-6-cypher-phase-completion-and-advancement-review: backlog
+  epic-3-retrospective: optional
+
+  # ─── Epic 4: Organizer Mission Control & Admin Overrides ───
+  epic-4: backlog
+  4-1-live-organizer-dashboard-and-judge-monitoring: backlog
+  4-2-score-override-and-immutable-audit-trail: backlog
+  4-3-competitor-withdrawal-and-rescue: backlog
+  4-4-solo-scoring-mode-and-phase-transition-control: backlog
+  epic-4-retrospective: optional
+
+  # ─── Epic 5: Battles Phase & Competition Completion ───
+  epic-5: backlog
+  5-1-battles-bracket-generation: backlog
+  5-2-judge-voting-interface-battles-mode: backlog
+  5-3-bracket-progression-and-winner-determination: backlog
+  epic-5-retrospective: optional
+
+  # ─── Epic 6: Public Standings, Bracket View & Presenter Mode ───
+  epic-6: backlog
+  6-1-public-standings-with-score-breakdowns: backlog
+  6-2-full-battles-bracket-view-on-public-url: backlog
+  6-3-presenter-mc-teleprompter-view: backlog
+  epic-6-retrospective: optional
+
+  # ─── Epic 7: Simulation Mode & Judge Training ───
+  epic-7: backlog
+  7-1-create-a-simulation-competition: backlog
+  7-2-organizer-runs-full-simulation-as-all-roles: backlog
+  7-3-simulation-reset-and-judge-training-access: backlog
+  epic-7-retrospective: optional
+
+  # ─── Epic 8: Internationalization ───
+  epic-8: backlog
+  8-1-i18next-configuration-and-translation-infrastructure: backlog
+  8-2-language-switcher-and-persistent-preference: backlog
+  epic-8-retrospective: optional

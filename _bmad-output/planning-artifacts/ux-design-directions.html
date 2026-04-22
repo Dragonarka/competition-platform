@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>competition-platform — Design Directions</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --zinc-50: #FAFAFA; --zinc-100: #F4F4F5; --zinc-200: #E4E4E7;
+    --zinc-300: #D4D4D8; --zinc-400: #A1A1AA; --zinc-500: #71717A;
+    --zinc-600: #52525B; --zinc-700: #3F3F46; --zinc-800: #27272A;
+    --zinc-900: #18181B; --zinc-950: #09090B;
+    --blue-500: #3B82F6; --blue-600: #2563EB; --blue-400: #60A5FA;
+    --green-500: #22C55E; --green-400: #4ADE80;
+    --yellow-500: #EAB308; --yellow-400: #FACC15;
+    --red-500: #EF4444; --red-400: #F87171;
+    --amber-500: #F59E0B;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--zinc-950);
+    color: var(--zinc-50);
+    line-height: 1.5;
+  }
+
+  /* NAV */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: var(--zinc-900); border-bottom: 1px solid var(--zinc-800);
+    display: flex; align-items: center; padding: 12px 24px; gap: 16px;
+  }
+  .nav h1 { font-size: 16px; font-weight: 700; color: var(--zinc-50); white-space: nowrap; }
+  .nav-tabs { display: flex; gap: 4px; overflow-x: auto; }
+  .nav-tab {
+    padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
+    cursor: pointer; white-space: nowrap; transition: all 0.15s;
+    background: transparent; color: var(--zinc-400); border: 1px solid transparent;
+  }
+  .nav-tab:hover { color: var(--zinc-200); background: var(--zinc-800); }
+  .nav-tab.active { color: var(--zinc-50); background: var(--zinc-800); border-color: var(--zinc-700); }
+
+  .content { padding-top: 60px; }
+  .section { display: none; padding: 32px 24px; min-height: calc(100vh - 60px); }
+  .section.active { display: block; }
+
+  .section-header { margin-bottom: 32px; }
+  .section-header h2 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+  .section-header p { color: var(--zinc-400); font-size: 14px; max-width: 700px; }
+  .section-header .tag {
+    display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 11px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;
+  }
+  .tag-recommended { background: #22C55E22; color: var(--green-400); }
+  .tag-alternative { background: #3B82F622; color: var(--blue-400); }
+
+  /* MOCKUP CONTAINERS */
+  .mockup-grid { display: grid; grid-template-columns: 1fr; gap: 32px; max-width: 1400px; }
+  .mockup-row { display: grid; grid-template-columns: 1fr 320px; gap: 24px; align-items: start; }
+  @media (max-width: 900px) { .mockup-row { grid-template-columns: 1fr; } }
+
+  .mockup-card {
+    border: 1px solid var(--zinc-800); border-radius: 12px; overflow: hidden;
+    background: var(--zinc-900);
+  }
+  .mockup-label {
+    padding: 12px 16px; background: var(--zinc-800); font-size: 12px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--zinc-400); display: flex; justify-content: space-between; align-items: center;
+  }
+  .mockup-label .device { font-size: 11px; color: var(--zinc-500); text-transform: none; font-weight: 400; }
+
+  /* ===== DIRECTION A: CONTROL ROOM (Dark, Dense, Data-Rich) ===== */
+  .da-dashboard {
+    background: var(--zinc-950); padding: 0; display: grid;
+    grid-template-columns: 56px 1fr; min-height: 500px;
+  }
+  .da-sidebar {
+    background: var(--zinc-900); border-right: 1px solid var(--zinc-800);
+    display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 8px;
+  }
+  .da-sidebar-icon {
+    width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; color: var(--zinc-500); font-size: 16px; cursor: pointer;
+  }
+  .da-sidebar-icon:hover { background: var(--zinc-800); color: var(--zinc-300); }
+  .da-sidebar-icon.active { background: var(--zinc-800); color: var(--blue-400); }
+  .da-main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .da-topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 12px; border-bottom: 1px solid var(--zinc-800);
+  }
+  .da-topbar h3 { font-size: 16px; font-weight: 600; }
+  .da-phase-badge {
+    padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    background: #3B82F622; color: var(--blue-400);
+  }
+  .da-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1; }
+  .da-panel {
+    background: var(--zinc-900); border: 1px solid var(--zinc-800);
+    border-radius: 8px; padding: 12px;
+  }
+  .da-panel-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--zinc-500); margin-bottom: 10px;
+  }
+  .da-progress-bar {
+    height: 6px; background: var(--zinc-800); border-radius: 3px;
+    overflow: hidden; margin: 8px 0;
+  }
+  .da-progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .da-judge-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0;
+    border-bottom: 1px solid var(--zinc-800); font-size: 13px;
+  }
+  .da-judge-row:last-child { border-bottom: none; }
+  .da-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .da-alert-card {
+    background: #EAB30811; border: 1px solid #EAB30833; border-radius: 6px;
+    padding: 10px 12px; font-size: 12px; color: var(--yellow-400);
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .da-stat { text-align: center; }
+  .da-stat-value { font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  .da-stat-label { font-size: 11px; color: var(--zinc-500); margin-top: 2px; }
+  .da-next-card {
+    background: var(--zinc-800); border-radius: 6px; padding: 10px 12px;
+    font-size: 13px; display: flex; justify-content: space-between; align-items: center;
+  }
+
+  /* ===== DIRECTION A: JUDGE MOBILE ===== */
+  .da-judge-mobile {
+    background: var(--zinc-950); width: 100%; max-width: 320px; margin: 0 auto;
+    min-height: 580px; display: flex; flex-direction: column;
+  }
+  .da-judge-header {
+    padding: 12px 16px; background: var(--zinc-900);
+    border-bottom: 1px solid var(--zinc-800);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .da-judge-header h4 { font-size: 14px; font-weight: 600; }
+  .da-connection-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .da-judge-content { padding: 16px; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+  .da-competitor-card {
+    background: var(--zinc-900); border: 1px solid var(--zinc-800);
+    border-radius: 10px; padding: 16px; text-align: center;
+  }
+  .da-competitor-number { font-size: 12px; color: var(--zinc-500); margin-bottom: 4px; }
+  .da-competitor-name { font-size: 20px; font-weight: 700; }
+  .da-score-input-group { display: flex; flex-direction: column; gap: 10px; }
+  .da-score-row {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px;
+  }
+  .da-score-label { font-size: 13px; color: var(--zinc-300); flex: 1; }
+  .da-score-input {
+    width: 80px; height: 56px; background: var(--zinc-900);
+    border: 2px solid var(--zinc-700); border-radius: 10px;
+    color: var(--zinc-50); font-size: 24px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace; text-align: center;
+  }
+  .da-score-input.filled { border-color: var(--blue-500); }
+  .da-score-input.confirmed { border-color: var(--green-500); }
+  .da-submit-btn {
+    width: 100%; height: 56px; border: none; border-radius: 10px;
+    font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.15s;
+    margin-top: auto;
+  }
+  .da-submit-btn.ready { background: var(--blue-500); color: white; }
+  .da-submit-btn.ready:hover { background: var(--blue-600); }
+  .da-submit-btn.submitted { background: var(--green-500); color: white; }
+  .da-submit-btn.disabled { background: var(--zinc-800); color: var(--zinc-600); cursor: not-allowed; }
+
+  /* ===== DIRECTION A: PRESENTER ===== */
+  .da-presenter {
+    background: var(--zinc-950); width: 100%; max-width: 320px; margin: 0 auto;
+    min-height: 580px; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; text-align: center; padding: 32px;
+  }
+  .da-presenter-label {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 2px; color: var(--zinc-500); margin-bottom: 24px;
+  }
+  .da-presenter-names { font-size: 42px; font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+  .da-presenter-round { font-size: 16px; color: var(--zinc-400); margin-bottom: 48px; }
+  .da-presenter-next { color: var(--zinc-600); font-size: 13px; }
+  .da-presenter-next-names { color: var(--zinc-400); font-size: 20px; font-weight: 600; margin-top: 8px; }
+
+  /* ===== DIRECTION B: WARM ACCENT ===== */
+  .db-dashboard {
+    background: #0C0A09; padding: 0; display: grid;
+    grid-template-columns: 220px 1fr; min-height: 500px;
+  }
+  .db-sidebar {
+    background: #1C1917; border-right: 1px solid #292524;
+    padding: 16px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .db-sidebar-logo { font-size: 15px; font-weight: 700; padding: 8px; margin-bottom: 12px; color: #FAFAF9; }
+  .db-sidebar-item {
+    padding: 8px 10px; border-radius: 6px; font-size: 13px; color: #A8A29E;
+    cursor: pointer; display: flex; align-items: center; gap: 10px;
+  }
+  .db-sidebar-item:hover { background: #292524; color: #E7E5E4; }
+  .db-sidebar-item.active { background: #292524; color: #FAFAF9; font-weight: 500; }
+  .db-sidebar-divider { height: 1px; background: #292524; margin: 8px 0; }
+  .db-main { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .db-topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 12px;
+  }
+  .db-topbar h3 { font-size: 18px; font-weight: 700; color: #FAFAF9; }
+  .db-live-badge {
+    padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+    background: #22C55E22; color: var(--green-400); display: flex; align-items: center; gap: 6px;
+  }
+  .db-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green-400); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .db-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .db-stat-card {
+    background: #1C1917; border: 1px solid #292524; border-radius: 8px; padding: 12px;
+  }
+  .db-stat-value {
+    font-size: 24px; font-weight: 700; font-family: 'JetBrains Mono', monospace;
+    color: #FAFAF9;
+  }
+  .db-stat-label { font-size: 11px; color: #78716C; margin-top: 2px; }
+  .db-content-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; flex: 1; }
+  .db-panel {
+    background: #1C1917; border: 1px solid #292524; border-radius: 8px; padding: 12px;
+  }
+  .db-panel-title {
+    font-size: 12px; font-weight: 600; color: #78716C; margin-bottom: 10px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .db-judge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .db-judge-card {
+    background: #292524; border-radius: 6px; padding: 10px; text-align: center;
+  }
+  .db-judge-name { font-size: 12px; font-weight: 500; color: #E7E5E4; margin-bottom: 4px; }
+  .db-judge-status { font-size: 11px; }
+  .db-amber-accent { color: var(--amber-500); }
+
+  /* ===== DIRECTION B: JUDGE ===== */
+  .db-judge-mobile {
+    background: #0C0A09; width: 100%; max-width: 320px; margin: 0 auto;
+    min-height: 580px; display: flex; flex-direction: column;
+  }
+  .db-judge-header {
+    padding: 14px 16px; background: #1C1917;
+    border-bottom: 1px solid #292524;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .db-judge-content { padding: 16px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+  .db-competitor-badge {
+    background: #292524; border-radius: 10px; padding: 20px; text-align: center;
+  }
+  .db-score-criterion {
+    background: #1C1917; border: 1px solid #292524; border-radius: 8px; padding: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .db-score-val {
+    width: 72px; height: 48px; background: #292524; border: 2px solid #44403C;
+    border-radius: 8px; color: #FAFAF9; font-size: 22px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace; text-align: center;
+  }
+  .db-score-val.filled { border-color: var(--amber-500); }
+  .db-submit-warm {
+    width: 100%; height: 52px; border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 700; cursor: pointer; margin-top: auto;
+    background: var(--amber-500); color: #0C0A09;
+  }
+
+  /* ===== DIRECTION C: LIGHT MODE PROFESSIONAL ===== */
+  .dc-dashboard {
+    background: #FAFAFA; padding: 0; display: grid;
+    grid-template-columns: 240px 1fr; min-height: 500px; color: #09090B;
+  }
+  .dc-sidebar {
+    background: white; border-right: 1px solid #E4E4E7;
+    padding: 16px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .dc-sidebar-logo {
+    font-size: 15px; font-weight: 700; padding: 8px; margin-bottom: 16px; color: #09090B;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .dc-sidebar-item {
+    padding: 8px 10px; border-radius: 6px; font-size: 13px; color: #71717A;
+    cursor: pointer; display: flex; align-items: center; gap: 10px;
+  }
+  .dc-sidebar-item:hover { background: #F4F4F5; color: #09090B; }
+  .dc-sidebar-item.active { background: #F4F4F5; color: #09090B; font-weight: 500; }
+  .dc-main { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .dc-topbar { display: flex; justify-content: space-between; align-items: center; }
+  .dc-topbar h3 { font-size: 18px; font-weight: 700; color: #09090B; }
+  .dc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .dc-stat-card {
+    background: white; border: 1px solid #E4E4E7; border-radius: 8px; padding: 14px;
+  }
+  .dc-stat-value {
+    font-size: 24px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #09090B;
+  }
+  .dc-stat-label { font-size: 11px; color: #A1A1AA; margin-top: 2px; }
+  .dc-content-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; }
+  .dc-panel { background: white; border: 1px solid #E4E4E7; border-radius: 8px; padding: 14px; }
+  .dc-panel-title { font-size: 12px; font-weight: 600; color: #A1A1AA; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .dc-table { width: 100%; font-size: 13px; }
+  .dc-table th { text-align: left; font-size: 11px; color: #A1A1AA; font-weight: 500; padding: 6px 0; border-bottom: 1px solid #E4E4E7; }
+  .dc-table td { padding: 8px 0; border-bottom: 1px solid #F4F4F5; color: #3F3F46; }
+  .dc-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500;
+  }
+  .dc-badge-green { background: #DCFCE7; color: #166534; }
+  .dc-badge-yellow { background: #FEF9C3; color: #854D0E; }
+  .dc-badge-gray { background: #F4F4F5; color: #71717A; }
+
+  /* ===== DIRECTION C: JUDGE LIGHT ===== */
+  .dc-judge-mobile {
+    background: #FAFAFA; width: 100%; max-width: 320px; margin: 0 auto;
+    min-height: 580px; display: flex; flex-direction: column; color: #09090B;
+  }
+  .dc-judge-header {
+    padding: 14px 16px; background: white; border-bottom: 1px solid #E4E4E7;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .dc-judge-content { padding: 16px; flex: 1; display: flex; flex-direction: column; gap: 14px; }
+  .dc-competitor-light {
+    background: white; border: 1px solid #E4E4E7; border-radius: 10px;
+    padding: 20px; text-align: center;
+  }
+  .dc-score-criterion-light {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #F4F4F5;
+  }
+  .dc-score-criterion-light label { font-size: 14px; color: #3F3F46; }
+  .dc-score-input-light {
+    width: 72px; height: 48px; background: white; border: 2px solid #E4E4E7;
+    border-radius: 8px; color: #09090B; font-size: 22px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace; text-align: center;
+  }
+  .dc-score-input-light.filled { border-color: var(--blue-500); }
+  .dc-submit-light {
+    width: 100%; height: 52px; border: none; border-radius: 8px;
+    font-size: 15px; font-weight: 700; cursor: pointer; margin-top: auto;
+    background: var(--blue-500); color: white;
+  }
+
+  /* ===== COMPARISON VIEW ===== */
+  .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 900px) { .compare-grid { grid-template-columns: 1fr; } }
+  .compare-phones { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+
+  /* OVERVIEW */
+  .overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1200px; }
+  @media (max-width: 1000px) { .overview-grid { grid-template-columns: 1fr; } }
+  .overview-card {
+    background: var(--zinc-900); border: 1px solid var(--zinc-800); border-radius: 12px;
+    padding: 24px; transition: border-color 0.2s;
+  }
+  .overview-card:hover { border-color: var(--zinc-600); }
+  .overview-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .overview-card .subtitle { font-size: 13px; color: var(--zinc-500); margin-bottom: 16px; }
+  .overview-card ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .overview-card li { font-size: 13px; color: var(--zinc-300); padding-left: 16px; position: relative; }
+  .overview-card li::before { content: "→"; position: absolute; left: 0; color: var(--zinc-600); }
+  .overview-card .best-for {
+    margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--zinc-800);
+    font-size: 12px; color: var(--zinc-500);
+  }
+  .overview-card .best-for strong { color: var(--zinc-300); }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <h1>Design Directions</h1>
+  <div class="nav-tabs">
+    <div class="nav-tab active" onclick="showSection('overview')">Overview</div>
+    <div class="nav-tab" onclick="showSection('dir-a')">A: Control Room</div>
+    <div class="nav-tab" onclick="showSection('dir-b')">B: Warm Ops</div>
+    <div class="nav-tab" onclick="showSection('dir-c')">C: Light Pro</div>
+    <div class="nav-tab" onclick="showSection('compare-dash')">Compare: Dashboards</div>
+    <div class="nav-tab" onclick="showSection('compare-judge')">Compare: Judge</div>
+    <div class="nav-tab" onclick="showSection('compare-presenter')">Compare: Presenter</div>
+  </div>
+</nav>
+
+<div class="content">
+
+  <!-- OVERVIEW -->
+  <div id="overview" class="section active">
+    <div class="section-header">
+      <h2>Design Direction Overview</h2>
+      <p>Three visual approaches for competition-platform, all built on the same foundation: Inter + JetBrains Mono, 4px grid, zinc palette, shadcn/ui + Tremor components. The differences are in tone, density, and color temperature.</p>
+    </div>
+    <div class="overview-grid">
+      <div class="overview-card">
+        <h3>A: Control Room</h3>
+        <div class="subtitle">Dark • Ultra-Dense • Icon Sidebar</div>
+        <span class="tag tag-recommended">RECOMMENDED</span>
+        <ul style="margin-top: 16px;">
+          <li>Collapsed icon-only sidebar (56px)</li>
+          <li>Maximum data density on dashboard</li>
+          <li>Pure zinc palette, blue accent</li>
+          <li>Grafana / Linear inspired</li>
+          <li>Highest information-per-pixel ratio</li>
+          <li>Dark mode native — feels at home in dim venues</li>
+        </ul>
+        <div class="best-for"><strong>Best for:</strong> Organizers who want to see everything at once. Matches "mission control" and "tight & efficient" requirements.</div>
+      </div>
+      <div class="overview-card">
+        <h3>B: Warm Ops</h3>
+        <div class="subtitle">Dark • Stone Palette • Amber Accent</div>
+        <span class="tag tag-alternative">ALTERNATIVE</span>
+        <ul style="margin-top: 16px;">
+          <li>Expanded sidebar with labels (220px)</li>
+          <li>Stone/warm neutral palette instead of zinc</li>
+          <li>Amber accent for primary actions</li>
+          <li>Slightly warmer, more approachable</li>
+          <li>Judge cards instead of rows for status</li>
+          <li>Same density, warmer personality</li>
+        </ul>
+        <div class="best-for"><strong>Best for:</strong> If the pure zinc/blue feels too cold or technical. Adds warmth without sacrificing professionalism.</div>
+      </div>
+      <div class="overview-card">
+        <h3>C: Light Professional</h3>
+        <div class="subtitle">Light • Clean • Traditional Layout</div>
+        <span class="tag tag-alternative">ALTERNATIVE</span>
+        <ul style="margin-top: 16px;">
+          <li>Expanded sidebar with labels (240px)</li>
+          <li>White cards on light gray background</li>
+          <li>Traditional SaaS dashboard aesthetic</li>
+          <li>Table-based judge status (vs cards/rows)</li>
+          <li>Badge-based status indicators</li>
+          <li>Familiar to anyone who's used Stripe/Linear</li>
+        </ul>
+        <div class="best-for"><strong>Best for:</strong> If organizers work in well-lit offices pre-event. Light mode as default with dark mode toggle for venues.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DIRECTION A: CONTROL ROOM -->
+  <div id="dir-a" class="section">
+    <div class="section-header">
+      <h2>Direction A: Control Room</h2>
+      <p>Dark, dense, icon sidebar. Maximum information density with zinc palette and blue accent. Inspired by Grafana, Linear, and mission control interfaces.</p>
+      <span class="tag tag-recommended">RECOMMENDED</span>
+    </div>
+    <div class="mockup-grid">
+      <!-- Dashboard -->
+      <div class="mockup-card">
+        <div class="mockup-label">Admin Dashboard — Live Event <span class="device">Desktop 1440px</span></div>
+        <div class="da-dashboard">
+          <div class="da-sidebar">
+            <div class="da-sidebar-icon active" title="Dashboard">▣</div>
+            <div class="da-sidebar-icon" title="Competitions">⚔</div>
+            <div class="da-sidebar-icon" title="Competitors">♟</div>
+            <div class="da-sidebar-icon" title="Judges">⚖</div>
+            <div class="da-sidebar-icon" title="Settings">⚙</div>
+          </div>
+          <div class="da-main">
+            <div class="da-topbar">
+              <div>
+                <h3>Salsa Championship 2026</h3>
+                <span style="font-size: 12px; color: var(--zinc-500);">Jack & Jill — Round 3 of 5</span>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div class="db-live-badge"><div class="db-live-dot"></div> LIVE</div>
+                <div class="da-phase-badge">Phase 2 of 4</div>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+              <div class="da-panel" style="text-align: center; padding: 10px;">
+                <div class="da-stat-value" style="color: var(--green-400);">3<span style="font-size: 16px; color: var(--zinc-500);">/5</span></div>
+                <div class="da-stat-label">Judges Submitted</div>
+              </div>
+              <div class="da-panel" style="text-align: center; padding: 10px;">
+                <div class="da-stat-value">24</div>
+                <div class="da-stat-label">Competitors Active</div>
+              </div>
+              <div class="da-panel" style="text-align: center; padding: 10px;">
+                <div class="da-stat-value">12</div>
+                <div class="da-stat-label">Matches This Round</div>
+              </div>
+              <div class="da-panel" style="text-align: center; padding: 10px;">
+                <div class="da-stat-value" style="color: var(--blue-400);">68%</div>
+                <div class="da-stat-label">Round Progress</div>
+              </div>
+            </div>
+            <div class="da-grid">
+              <div class="da-panel">
+                <div class="da-panel-title">CURRENT ROUND</div>
+                <div style="font-size: 14px; font-weight: 500; margin-bottom: 8px;">Round 3 — Match 7 of 12</div>
+                <div class="da-progress-bar">
+                  <div class="da-progress-fill" style="width: 58%; background: var(--blue-500);"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--zinc-500); margin-top: 4px;">
+                  <span>7 complete</span><span>5 remaining</span>
+                </div>
+                <div class="da-next-card" style="margin-top: 10px;">
+                  <span style="color: var(--zinc-400);">Next up</span>
+                  <span style="font-weight: 500;">Carlos & María</span>
+                </div>
+              </div>
+              <div class="da-panel">
+                <div class="da-panel-title">JUDGES</div>
+                <div class="da-judge-row">
+                  <div class="da-status-dot" style="background: var(--green-500);"></div>
+                  <span style="flex: 1;">Marco</span>
+                  <span style="font-size: 11px; color: var(--green-400);">✓✓ Submitted</span>
+                </div>
+                <div class="da-judge-row">
+                  <div class="da-status-dot" style="background: var(--green-500);"></div>
+                  <span style="flex: 1;">Ana</span>
+                  <span style="font-size: 11px; color: var(--green-400);">✓✓ Submitted</span>
+                </div>
+                <div class="da-judge-row">
+                  <div class="da-status-dot" style="background: var(--yellow-500);"></div>
+                  <span style="flex: 1;">Pedro</span>
+                  <span style="font-size: 11px; color: var(--yellow-400);">✓ Scoring...</span>
+                </div>
+                <div class="da-judge-row">
+                  <div class="da-status-dot" style="background: var(--zinc-600);"></div>
+                  <span style="flex: 1;">Lucía</span>
+                  <span style="font-size: 11px; color: var(--zinc-500);">○ Waiting</span>
+                </div>
+                <div class="da-judge-row">
+                  <div class="da-status-dot" style="background: var(--zinc-600);"></div>
+                  <span style="flex: 1;">Diego</span>
+                  <span style="font-size: 11px; color: var(--zinc-500);">○ Waiting</span>
+                </div>
+              </div>
+              <div class="da-panel">
+                <div class="da-panel-title">NEXT ROUND</div>
+                <div class="da-next-card">
+                  <span>Round 4</span>
+                  <span class="da-phase-badge">Ready</span>
+                </div>
+                <div style="margin-top: 8px; font-size: 12px; color: var(--zinc-500);">12 competitors • 6 matches</div>
+                <div style="margin-top: 12px;">
+                  <div class="da-panel-title" style="margin-bottom: 6px;">PHASE PROGRESSION</div>
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <div style="flex:1; height: 4px; border-radius: 2px; background: var(--green-500);"></div>
+                    <div style="flex:1; height: 4px; border-radius: 2px; background: var(--blue-500);"></div>
+                    <div style="flex:1; height: 4px; border-radius: 2px; background: var(--zinc-700);"></div>
+                    <div style="flex:1; height: 4px; border-radius: 2px; background: var(--zinc-700);"></div>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--zinc-600); margin-top: 4px;">
+                    <span>Groups ✓</span><span style="color: var(--blue-400);">J&J</span><span>Semis</span><span>Finals</span>
+                  </div>
+                </div>
+              </div>
+              <div class="da-panel">
+                <div class="da-panel-title">ALERTS</div>
+                <div class="da-alert-card">
+                  <span>⚠</span>
+                  <div>
+                    <div style="font-weight: 500;">Odd number in Group B</div>
+                    <div style="font-size: 11px; color: var(--zinc-500); margin-top: 2px;">Bye assigned to #14 (auto-resolved)</div>
+                  </div>
+                </div>
+                <div style="margin-top: 10px; font-size: 12px; color: var(--zinc-600); text-align: center;">No critical issues</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Judge + Presenter side by side -->
+      <div class="mockup-row" style="margin-top: 8px;">
+        <div></div>
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+        </div>
+      </div>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div class="mockup-card" style="flex: 1; min-width: 320px; max-width: 360px;">
+          <div class="mockup-label">Judge Scoring <span class="device">Mobile 375px</span></div>
+          <div class="da-judge-mobile">
+            <div class="da-judge-header">
+              <div>
+                <div style="font-size: 12px; color: var(--zinc-500);">Salsa Championship</div>
+                <h4>Round 3 — Match 7</h4>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div class="da-connection-dot" style="background: var(--green-500);"></div>
+                <span style="font-size: 11px; color: var(--zinc-500);">Connected</span>
+              </div>
+            </div>
+            <div class="da-judge-content">
+              <div class="da-competitor-card">
+                <div class="da-competitor-number">#7 — Jack & Jill</div>
+                <div class="da-competitor-name">Carlos & María</div>
+              </div>
+              <div class="da-score-input-group">
+                <div class="da-score-row">
+                  <span class="da-score-label">Technique</span>
+                  <input class="da-score-input filled" type="text" value="8.50" readonly>
+                </div>
+                <div class="da-score-row">
+                  <span class="da-score-label">Musicality</span>
+                  <input class="da-score-input filled" type="text" value="7.75" readonly>
+                </div>
+                <div class="da-score-row">
+                  <span class="da-score-label">Connection</span>
+                  <input class="da-score-input" type="text" value="" placeholder="0.00" readonly>
+                </div>
+              </div>
+              <button class="da-submit-btn disabled">Submit Score</button>
+            </div>
+          </div>
+        </div>
+        <div class="mockup-card" style="flex: 1; min-width: 320px; max-width: 360px;">
+          <div class="mockup-label">Presenter View <span class="device">Mobile 375px</span></div>
+          <div class="da-presenter">
+            <div class="da-presenter-label">Now Competing</div>
+            <div class="da-presenter-names">Carlos<br>&amp; María</div>
+            <div class="da-presenter-round">Round 3 — Jack & Jill</div>
+            <div class="da-presenter-next">NEXT UP</div>
+            <div class="da-presenter-next-names">André & Sofia</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DIRECTION B: WARM OPS -->
+  <div id="dir-b" class="section">
+    <div class="section-header">
+      <h2>Direction B: Warm Ops</h2>
+      <p>Dark with warm stone palette and amber accent. Expanded sidebar with labels. Same density as A but with a warmer, more approachable personality.</p>
+      <span class="tag tag-alternative">ALTERNATIVE</span>
+    </div>
+    <div class="mockup-grid">
+      <div class="mockup-card">
+        <div class="mockup-label">Admin Dashboard — Live Event <span class="device">Desktop 1440px</span></div>
+        <div class="db-dashboard">
+          <div class="db-sidebar">
+            <div class="db-sidebar-logo">⚔ CompPlatform</div>
+            <div class="db-sidebar-item active">▣ Dashboard</div>
+            <div class="db-sidebar-item">⚔ Competitions</div>
+            <div class="db-sidebar-item">♟ Competitors</div>
+            <div class="db-sidebar-item">⚖ Judges</div>
+            <div class="db-sidebar-divider"></div>
+            <div class="db-sidebar-item">📋 Templates</div>
+            <div class="db-sidebar-item">⚙ Settings</div>
+          </div>
+          <div class="db-main">
+            <div class="db-topbar">
+              <h3>Salsa Championship 2026</h3>
+              <div class="db-live-badge"><div class="db-live-dot"></div> LIVE</div>
+            </div>
+            <div class="db-stats">
+              <div class="db-stat-card">
+                <div class="db-stat-value" style="color: var(--green-400);">3<span style="font-size: 14px; color: #78716C;">/5</span></div>
+                <div class="db-stat-label">Judges Submitted</div>
+              </div>
+              <div class="db-stat-card">
+                <div class="db-stat-value">24</div>
+                <div class="db-stat-label">Active Competitors</div>
+              </div>
+              <div class="db-stat-card">
+                <div class="db-stat-value" style="color: var(--amber-500);">R3</div>
+                <div class="db-stat-label">Current Round</div>
+              </div>
+              <div class="db-stat-card">
+                <div class="db-stat-value">P2<span style="font-size: 14px; color: #78716C;">/4</span></div>
+                <div class="db-stat-label">Phase Progress</div>
+              </div>
+            </div>
+            <div class="db-content-grid">
+              <div class="db-panel">
+                <div class="db-panel-title">
+                  <span>JUDGE STATUS</span>
+                  <span style="font-size: 11px; color: var(--green-400);">3 of 5 submitted</span>
+                </div>
+                <div class="db-judge-grid">
+                  <div class="db-judge-card" style="border-left: 3px solid var(--green-500);">
+                    <div class="db-judge-name">Marco</div>
+                    <div class="db-judge-status" style="color: var(--green-400); font-size: 11px;">✓✓ Done</div>
+                  </div>
+                  <div class="db-judge-card" style="border-left: 3px solid var(--green-500);">
+                    <div class="db-judge-name">Ana</div>
+                    <div class="db-judge-status" style="color: var(--green-400); font-size: 11px;">✓✓ Done</div>
+                  </div>
+                  <div class="db-judge-card" style="border-left: 3px solid var(--yellow-500);">
+                    <div class="db-judge-name">Pedro</div>
+                    <div class="db-judge-status" style="color: var(--yellow-400); font-size: 11px;">✓ Scoring</div>
+                  </div>
+                  <div class="db-judge-card" style="border-left: 3px solid #44403C;">
+                    <div class="db-judge-name">Lucía</div>
+                    <div class="db-judge-status" style="color: #78716C; font-size: 11px;">○ Waiting</div>
+                  </div>
+                  <div class="db-judge-card" style="border-left: 3px solid #44403C;">
+                    <div class="db-judge-name">Diego</div>
+                    <div class="db-judge-status" style="color: #78716C; font-size: 11px;">○ Waiting</div>
+                  </div>
+                </div>
+              </div>
+              <div class="db-panel">
+                <div class="db-panel-title">CURRENT MATCH</div>
+                <div style="text-align: center; padding: 16px 0;">
+                  <div style="font-size: 11px; color: #78716C;">Match 7 of 12</div>
+                  <div style="font-size: 22px; font-weight: 700; color: #FAFAF9; margin: 8px 0;">Carlos & María</div>
+                  <div style="font-size: 13px; color: #A8A29E;">Jack & Jill — Round 3</div>
+                </div>
+                <div style="margin-top: 8px; padding-top: 12px; border-top: 1px solid #292524;">
+                  <div style="font-size: 11px; color: #78716C; margin-bottom: 6px;">NEXT UP</div>
+                  <div style="font-size: 14px; color: #E7E5E4;">André & Sofia</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div class="mockup-card" style="flex: 1; min-width: 320px; max-width: 360px;">
+          <div class="mockup-label">Judge Scoring <span class="device">Mobile 375px</span></div>
+          <div class="db-judge-mobile">
+            <div class="db-judge-header">
+              <div>
+                <div style="font-size: 12px; color: #78716C;">Salsa Championship</div>
+                <h4 style="font-size: 14px; font-weight: 600; color: #FAFAF9;">Round 3 — Match 7</h4>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--green-500);"></div>
+                <span style="font-size: 11px; color: #78716C;">Online</span>
+              </div>
+            </div>
+            <div class="db-judge-content">
+              <div class="db-competitor-badge">
+                <div style="font-size: 12px; color: #78716C;">#7 — Jack & Jill</div>
+                <div style="font-size: 22px; font-weight: 700; color: #FAFAF9; margin-top: 4px;">Carlos & María</div>
+              </div>
+              <div class="db-score-criterion">
+                <span style="font-size: 14px; color: #E7E5E4;">Technique</span>
+                <input class="db-score-val filled" type="text" value="8.50" readonly>
+              </div>
+              <div class="db-score-criterion">
+                <span style="font-size: 14px; color: #E7E5E4;">Musicality</span>
+                <input class="db-score-val filled" type="text" value="7.75" readonly>
+              </div>
+              <div class="db-score-criterion">
+                <span style="font-size: 14px; color: #E7E5E4;">Connection</span>
+                <input class="db-score-val" type="text" value="" placeholder="0.00" readonly>
+              </div>
+              <button class="db-submit-warm" style="opacity: 0.5; cursor: not-allowed;">Submit Score</button>
+            </div>
+          </div>
+        </div>
+        <div class="mockup-card" style="flex: 1; min-width: 320px; max-width: 360px;">
+          <div class="mockup-label">Presenter View <span class="device">Mobile 375px</span></div>
+          <div class="da-presenter" style="background: #0C0A09;">
+            <div class="da-presenter-label" style="color: #78716C;">Now Competing</div>
+            <div class="da-presenter-names" style="color: #FAFAF9;">Carlos<br>&amp; María</div>
+            <div class="da-presenter-round" style="color: #A8A29E;">Round 3 — Jack & Jill</div>
+            <div class="da-presenter-next" style="color: #57534E;">NEXT UP</div>
+            <div class="da-presenter-next-names" style="color: #A8A29E;">André & Sofia</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DIRECTION C: LIGHT PROFESSIONAL -->
+  <div id="dir-c" class="section">
+    <div class="section-header">
+      <h2>Direction C: Light Professional</h2>
+      <p>Light mode with white cards on gray background. Traditional SaaS dashboard aesthetic. Clean, familiar, professional. Blue accent on white.</p>
+      <span class="tag tag-alternative">ALTERNATIVE</span>
+    </div>
+    <div class="mockup-grid">
+      <div class="mockup-card">
+        <div class="mockup-label">Admin Dashboard — Live Event <span class="device">Desktop 1440px</span></div>
+        <div class="dc-dashboard">
+          <div class="dc-sidebar">
+            <div class="dc-sidebar-logo">⚔ CompPlatform</div>
+            <div class="dc-sidebar-item active">▣ Dashboard</div>
+            <div class="dc-sidebar-item">⚔ Competitions</div>
+            <div class="dc-sidebar-item">♟ Competitors</div>
+            <div class="dc-sidebar-item">⚖ Judges</div>
+            <div style="height: 1px; background: #E4E4E7; margin: 8px 0;"></div>
+            <div class="dc-sidebar-item">📋 Templates</div>
+            <div class="dc-sidebar-item">⚙ Settings</div>
+          </div>
+          <div class="dc-main">
+            <div class="dc-topbar">
+              <div>
+                <h3>Salsa Championship 2026</h3>
+                <span style="font-size: 12px; color: #A1A1AA;">Jack & Jill — Round 3 of 5 • Phase 2 of 4</span>
+              </div>
+              <div class="db-live-badge" style="background: #DCFCE7; color: #166534;">
+                <div class="db-live-dot" style="background: #166534;"></div> LIVE
+              </div>
+            </div>
+            <div class="dc-stats">
+              <div class="dc-stat-card">
+                <div class="dc-stat-value" style="color: #16A34A;">3<span style="font-size: 14px; color: #A1A1AA;">/5</span></div>
+                <div class="dc-stat-label">Judges Submitted</div>
+              </div>
+              <div class="dc-stat-card">
+                <div class="dc-stat-value">24</div>
+                <div class="dc-stat-label">Active Competitors</div>
+              </div>
+              <div class="dc-stat-card">
+                <div class="dc-stat-value">7<span style="font-size: 14px; color: #A1A1AA;">/12</span></div>
+                <div class="dc-stat-label">Matches Complete</div>
+              </div>
+              <div class="dc-stat-card">
+                <div class="dc-stat-value" style="color: var(--blue-500);">68%</div>
+                <div class="dc-stat-label">Round Progress</div>
+              </div>
+            </div>
+            <div class="dc-content-grid">
+              <div class="dc-panel">
+                <div class="dc-panel-title">JUDGE STATUS</div>
+                <table class="dc-table">
+                  <thead><tr><th>Judge</th><th>Status</th><th>Last Action</th></tr></thead>
+                  <tbody>
+                    <tr><td style="font-weight:500; color:#09090B;">Marco</td><td><span class="dc-badge dc-badge-green">✓✓ Submitted</span></td><td>12s ago</td></tr>
+                    <tr><td style="font-weight:500; color:#09090B;">Ana</td><td><span class="dc-badge dc-badge-green">✓✓ Submitted</span></td><td>28s ago</td></tr>
+                    <tr><td style="font-weight:500; color:#09090B;">Pedro</td><td><span class="dc-badge dc-badge-yellow">✓ Scoring</span></td><td>Active</td></tr>
+                    <tr><td style="font-weight:500; color:#09090B;">Lucía</td><td><span class="dc-badge dc-badge-gray">○ Waiting</span></td><td>—</td></tr>
+                    <tr><td style="font-weight:500; color:#09090B;">Diego</td><td><span class="dc-badge dc-badge-gray">○ Waiting</span></td><td>—</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="dc-panel">
+                <div class="dc-panel-title">CURRENT & NEXT</div>
+                <div style="padding: 12px; background: #F4F4F5; border-radius: 6px; margin-bottom: 12px;">
+                  <div style="font-size: 11px; color: #A1A1AA; margin-bottom: 4px;">NOW — Match 7 of 12</div>
+                  <div style="font-size: 18px; font-weight: 700; color: #09090B;">Carlos & María</div>
+                  <div style="font-size: 12px; color: #71717A; margin-top: 2px;">Jack & Jill — Round 3</div>
+                </div>
+                <div style="padding: 12px; border: 1px solid #E4E4E7; border-radius: 6px;">
+                  <div style="font-size: 11px; color: #A1A1AA; margin-bottom: 4px;">NEXT UP</div>
+                  <div style="font-size: 15px; font-weight: 600; color: #09090B;">André & Sofia</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div class="mockup-card" style="flex: 1; min-width: 320px; max-width: 360px;">
+          <div class="mockup-label">Judge Scoring <span class="device">Mobile 375px</span></div>
+          <div class="dc-judge-mobile">
+            <div class="dc-judge-header">
+              <div>
+                <div style="font-size: 12px; color: #A1A1AA;">Salsa Championship</div>
+                <h4 style="font-size: 14px; font-weight: 600; color: #09090B;">Round 3 — Match 7</h4>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--green-500);"></div>
+                <span style="font-size: 11px; color: #A1A1AA;">Connected</span>
+              </div>
+            </div>
+            <div class="dc-judge-content">
+              <div class="dc-competitor-light">
+                <div style="font-size: 12px; color: #A1A1AA;">#7 — Jack & Jill</div>
+                <div style="font-size: 22px; font-weight: 700; color: #09090B; margin-top: 4px;">Carlos & María</div>
+              </div>
+              <div>
+                <div class="dc-score-criterion-light">
+                  <label>Technique</label>
+                  <input class="dc-score-input-light filled" type="text" value="8.50" readonly>
+                </div>
+                <div class="dc-score-criterion-light">
+                  <label>Musicality</label>
+                  <input class="dc-score-input-light filled" type="text" value="7.75" readonly>
+                </div>
+                <div class="dc-score-criterion-light">
+                  <label>Connection</label>
+                  <input class="dc-score-input-light" type="text" value="" placeholder="0.00" readonly>
+                </div>
+              </div>
+              <button class="dc-submit-light" style="opacity: 0.5; cursor: not-allowed;">Submit Score</button>
+            </div>
+          </div>
+        </div>
+        <div class="mockup-card" style="flex: 1; min-width: 320px; max-width: 360px;">
+          <div class="mockup-label">Presenter View <span class="device">Mobile 375px</span></div>
+          <div class="da-presenter" style="background: #09090B;">
+            <div class="da-presenter-label">Now Competing</div>
+            <div class="da-presenter-names">Carlos<br>&amp; María</div>
+            <div class="da-presenter-round">Round 3 — Jack & Jill</div>
+            <div class="da-presenter-next">NEXT UP</div>
+            <div class="da-presenter-next-names">André & Sofia</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPARE DASHBOARDS -->
+  <div id="compare-dash" class="section">
+    <div class="section-header">
+      <h2>Compare: Admin Dashboards</h2>
+      <p>Side by side comparison of the three dashboard approaches. Scroll down to see all combinations.</p>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 32px;">
+      <div class="compare-grid">
+        <div class="mockup-card">
+          <div class="mockup-label">A: Control Room <span class="tag tag-recommended" style="margin: 0;">REC</span></div>
+          <div class="da-dashboard" style="min-height: 400px;">
+            <div class="da-sidebar">
+              <div class="da-sidebar-icon active">▣</div>
+              <div class="da-sidebar-icon">⚔</div>
+              <div class="da-sidebar-icon">♟</div>
+              <div class="da-sidebar-icon">⚖</div>
+            </div>
+            <div class="da-main">
+              <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">Salsa Championship 2026</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div class="da-panel" style="padding: 8px; text-align: center;">
+                  <div style="font-size: 20px; font-weight: 700; font-family: monospace; color: var(--green-400);">3/5</div>
+                  <div style="font-size: 10px; color: var(--zinc-500);">Judges</div>
+                </div>
+                <div class="da-panel" style="padding: 8px; text-align: center;">
+                  <div style="font-size: 20px; font-weight: 700; font-family: monospace;">24</div>
+                  <div style="font-size: 10px; color: var(--zinc-500);">Competitors</div>
+                </div>
+              </div>
+              <div class="da-panel" style="margin-top: 8px;">
+                <div style="font-size: 10px; color: var(--zinc-500); margin-bottom: 6px;">JUDGES</div>
+                <div class="da-judge-row" style="padding: 4px 0;">
+                  <div class="da-status-dot" style="background: var(--green-500);"></div>
+                  <span style="font-size: 12px;">Marco</span>
+                  <span style="font-size: 10px; color: var(--green-400); margin-left: auto;">✓✓</span>
+                </div>
+                <div class="da-judge-row" style="padding: 4px 0;">
+                  <div class="da-status-dot" style="background: var(--yellow-500);"></div>
+                  <span style="font-size: 12px;">Pedro</span>
+                  <span style="font-size: 10px; color: var(--yellow-400); margin-left: auto;">✓</span>
+                </div>
+                <div class="da-judge-row" style="padding: 4px 0; border: none;">
+                  <div class="da-status-dot" style="background: var(--zinc-600);"></div>
+                  <span style="font-size: 12px;">Lucía</span>
+                  <span style="font-size: 10px; color: var(--zinc-500); margin-left: auto;">○</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mockup-card">
+          <div class="mockup-label">B: Warm Ops <span class="tag tag-alternative" style="margin: 0;">ALT</span></div>
+          <div class="db-dashboard" style="min-height: 400px;">
+            <div class="db-sidebar" style="width: 160px;">
+              <div class="db-sidebar-logo" style="font-size: 13px;">⚔ CompPlatform</div>
+              <div class="db-sidebar-item active" style="font-size: 12px;">▣ Dashboard</div>
+              <div class="db-sidebar-item" style="font-size: 12px;">⚔ Competitions</div>
+              <div class="db-sidebar-item" style="font-size: 12px;">♟ Competitors</div>
+            </div>
+            <div class="db-main">
+              <div style="font-size: 14px; font-weight: 600; color: #FAFAF9; margin-bottom: 8px;">Salsa Championship 2026</div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div class="db-stat-card" style="padding: 8px;">
+                  <div style="font-size: 20px; font-weight: 700; font-family: monospace; color: var(--green-400);">3/5</div>
+                  <div style="font-size: 10px; color: #78716C;">Judges</div>
+                </div>
+                <div class="db-stat-card" style="padding: 8px;">
+                  <div style="font-size: 20px; font-weight: 700; font-family: monospace; color: #FAFAF9;">24</div>
+                  <div style="font-size: 10px; color: #78716C;">Competitors</div>
+                </div>
+              </div>
+              <div class="db-panel" style="margin-top: 8px;">
+                <div style="font-size: 10px; color: #78716C; margin-bottom: 6px;">JUDGES</div>
+                <div class="db-judge-grid" style="grid-template-columns: 1fr 1fr;">
+                  <div class="db-judge-card" style="border-left: 3px solid var(--green-500); padding: 6px;">
+                    <div style="font-size: 11px; color: #E7E5E4;">Marco</div>
+                    <div style="font-size: 10px; color: var(--green-400);">✓✓</div>
+                  </div>
+                  <div class="db-judge-card" style="border-left: 3px solid var(--yellow-500); padding: 6px;">
+                    <div style="font-size: 11px; color: #E7E5E4;">Pedro</div>
+                    <div style="font-size: 10px; color: var(--yellow-400);">✓</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPARE JUDGE -->
+  <div id="compare-judge" class="section">
+    <div class="section-header">
+      <h2>Compare: Judge Scoring</h2>
+      <p>The most critical interface — side by side comparison of judge scoring across all three directions.</p>
+    </div>
+    <div class="compare-phones">
+      <div class="mockup-card" style="width: 320px;">
+        <div class="mockup-label">A: Control Room <span class="tag tag-recommended" style="margin: 0;">REC</span></div>
+        <div class="da-judge-mobile" style="min-height: 480px;">
+          <div class="da-judge-header">
+            <h4 style="font-size: 13px; font-weight: 600;">Round 3 — Match 7</h4>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--green-500);"></div>
+            </div>
+          </div>
+          <div class="da-judge-content" style="padding: 12px;">
+            <div class="da-competitor-card" style="padding: 12px;">
+              <div style="font-size: 18px; font-weight: 700;">Carlos & María</div>
+            </div>
+            <div class="da-score-row">
+              <span class="da-score-label">Technique</span>
+              <input class="da-score-input filled" style="height: 48px; font-size: 20px; width: 72px;" type="text" value="8.50" readonly>
+            </div>
+            <div class="da-score-row">
+              <span class="da-score-label">Musicality</span>
+              <input class="da-score-input filled" style="height: 48px; font-size: 20px; width: 72px;" type="text" value="7.75" readonly>
+            </div>
+            <div class="da-score-row">
+              <span class="da-score-label">Connection</span>
+              <input class="da-score-input" style="height: 48px; font-size: 20px; width: 72px;" type="text" placeholder="0.00" readonly>
+            </div>
+            <button class="da-submit-btn disabled" style="height: 48px; font-size: 14px;">Submit</button>
+          </div>
+        </div>
+      </div>
+      <div class="mockup-card" style="width: 320px;">
+        <div class="mockup-label">B: Warm Ops</div>
+        <div class="db-judge-mobile" style="min-height: 480px;">
+          <div class="db-judge-header">
+            <h4 style="font-size: 13px; font-weight: 600; color: #FAFAF9;">Round 3 — Match 7</h4>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--green-500);"></div>
+            </div>
+          </div>
+          <div class="db-judge-content" style="padding: 12px;">
+            <div class="db-competitor-badge" style="padding: 12px;">
+              <div style="font-size: 18px; font-weight: 700; color: #FAFAF9;">Carlos & María</div>
+            </div>
+            <div class="db-score-criterion" style="padding: 8px;">
+              <span style="font-size: 13px; color: #E7E5E4;">Technique</span>
+              <input class="db-score-val filled" style="height: 44px; font-size: 18px; width: 68px;" type="text" value="8.50" readonly>
+            </div>
+            <div class="db-score-criterion" style="padding: 8px;">
+              <span style="font-size: 13px; color: #E7E5E4;">Musicality</span>
+              <input class="db-score-val filled" style="height: 44px; font-size: 18px; width: 68px;" type="text" value="7.75" readonly>
+            </div>
+            <div class="db-score-criterion" style="padding: 8px;">
+              <span style="font-size: 13px; color: #E7E5E4;">Connection</span>
+              <input class="db-score-val" style="height: 44px; font-size: 18px; width: 68px;" type="text" placeholder="0.00" readonly>
+            </div>
+            <button class="db-submit-warm" style="height: 48px; font-size: 14px; opacity: 0.5; cursor: not-allowed;">Submit</button>
+          </div>
+        </div>
+      </div>
+      <div class="mockup-card" style="width: 320px;">
+        <div class="mockup-label">C: Light Pro</div>
+        <div class="dc-judge-mobile" style="min-height: 480px;">
+          <div class="dc-judge-header">
+            <h4 style="font-size: 13px; font-weight: 600; color: #09090B;">Round 3 — Match 7</h4>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--green-500);"></div>
+            </div>
+          </div>
+          <div class="dc-judge-content" style="padding: 12px;">
+            <div class="dc-competitor-light" style="padding: 12px;">
+              <div style="font-size: 18px; font-weight: 700; color: #09090B;">Carlos & María</div>
+            </div>
+            <div class="dc-score-criterion-light">
+              <label style="font-size: 13px;">Technique</label>
+              <input class="dc-score-input-light filled" style="height: 44px; font-size: 18px; width: 68px;" type="text" value="8.50" readonly>
+            </div>
+            <div class="dc-score-criterion-light">
+              <label style="font-size: 13px;">Musicality</label>
+              <input class="dc-score-input-light filled" style="height: 44px; font-size: 18px; width: 68px;" type="text" value="7.75" readonly>
+            </div>
+            <div class="dc-score-criterion-light">
+              <label style="font-size: 13px;">Connection</label>
+              <input class="dc-score-input-light" style="height: 44px; font-size: 18px; width: 68px;" type="text" placeholder="0.00" readonly>
+            </div>
+            <button class="dc-submit-light" style="height: 48px; font-size: 14px; opacity: 0.5; cursor: not-allowed;">Submit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPARE PRESENTER -->
+  <div id="compare-presenter" class="section">
+    <div class="section-header">
+      <h2>Compare: Presenter View</h2>
+      <p>The presenter view is always dark mode (venue lighting). Differences are subtle — mainly in typography warmth and color temperature.</p>
+    </div>
+    <div class="compare-phones">
+      <div class="mockup-card" style="width: 320px;">
+        <div class="mockup-label">A: Control Room (Zinc)</div>
+        <div class="da-presenter" style="min-height: 480px;">
+          <div class="da-presenter-label">Now Competing</div>
+          <div class="da-presenter-names" style="font-size: 36px;">Carlos<br>&amp; María</div>
+          <div class="da-presenter-round" style="font-size: 14px;">Round 3 — Jack & Jill</div>
+          <div class="da-presenter-next" style="margin-top: 32px;">NEXT UP</div>
+          <div class="da-presenter-next-names" style="font-size: 18px;">André & Sofia</div>
+        </div>
+      </div>
+      <div class="mockup-card" style="width: 320px;">
+        <div class="mockup-label">B: Warm Ops (Stone)</div>
+        <div class="da-presenter" style="min-height: 480px; background: #0C0A09;">
+          <div class="da-presenter-label" style="color: #78716C;">Now Competing</div>
+          <div class="da-presenter-names" style="font-size: 36px; color: #FAFAF9;">Carlos<br>&amp; María</div>
+          <div class="da-presenter-round" style="font-size: 14px; color: #A8A29E;">Round 3 — Jack & Jill</div>
+          <div class="da-presenter-next" style="margin-top: 32px; color: #57534E;">NEXT UP</div>
+          <div class="da-presenter-next-names" style="font-size: 18px; color: #A8A29E;">André & Sofia</div>
+        </div>
+      </div>
+      <div class="mockup-card" style="width: 320px;">
+        <div class="mockup-label">C: Light Pro (always dark presenter)</div>
+        <div class="da-presenter" style="min-height: 480px; background: #09090B;">
+          <div class="da-presenter-label">Now Competing</div>
+          <div class="da-presenter-names" style="font-size: 36px;">Carlos<br>&amp; María</div>
+          <div class="da-presenter-round" style="font-size: 14px;">Round 3 — Jack & Jill</div>
+          <div class="da-presenter-next" style="margin-top: 32px;">NEXT UP</div>
+          <div class="da-presenter-next-names" style="font-size: 18px;">André & Sofia</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+
+</body>
+</html>

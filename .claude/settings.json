@@ -1,0 +1,22 @@
+{
+  "enabledPlugins": {
+    "claude-mem@thedotmack": true,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": true
+  },
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-commit-qa.sh",
+            "timeout": 10,
+            "statusMessage": "Checking for commits..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "@competition-platform/config-typescript",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    "./base.json": "./base.json",
+    "./next.json": "./next.json",
+    "./nest.json": "./nest.json"
+  }
+}
