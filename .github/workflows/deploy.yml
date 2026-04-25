@@ -7,9 +7,12 @@ on:
 
 jobs:
   deploy:
+    # Gated by repo variable so the workflow stays green until Fly is provisioned.
+    # Set Variables → ENABLE_DEPLOY=true (and add FLY_API_TOKEN secret) to enable.
+    if: ${{ vars.ENABLE_DEPLOY == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
