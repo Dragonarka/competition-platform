@@ -26,15 +26,20 @@
   "dependencies": {
     "@clerk/backend": "^1.0.0",
     "@competition-platform/db": "workspace:*",
+    "@competition-platform/format-cypher-battles": "workspace:*",
+    "@competition-platform/format-sdk": "workspace:*",
     "@competition-platform/shared": "workspace:*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.19",
+    "@nestjs/websockets": "^11.1.19",
     "@trpc/server": "^11.0.0",
     "drizzle-orm": "^0.38.0",
     "postgres": "^3.4.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3",
     "zod": "^3.0.0"
   },
   "devDependencies": {
@@ -46,6 +51,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
@@ -57,7 +63,6 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0",
-    "vitest": "^2.0.0",
-    "@vitest/coverage-v8": "^2.0.0"
+    "vitest": "^2.0.0"
   }
 }

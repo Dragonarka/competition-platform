@@ -7,6 +7,9 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "pnpm --filter @competition-platform/tests test",
+    "test:e2e:ui": "pnpm --filter @competition-platform/tests test:ui",
+    "test:e2e:install": "pnpm --filter @competition-platform/tests install:browsers",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yaml,yml}\"",
     "prepare": "husky"
   },

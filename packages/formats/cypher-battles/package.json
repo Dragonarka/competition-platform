@@ -1,0 +1,38 @@
+{
+  "name": "@competition-platform/format-cypher-battles",
+  "version": "0.0.1",
+  "license": "MIT",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./validators": "./src/validators/score-validator.ts",
+    "./scoring": "./src/scoring/aggregation.ts"
+  },
+  "typesVersions": {
+    "*": {
+      "validators": [
+        "./src/validators/score-validator.ts"
+      ],
+      "scoring": [
+        "./src/scoring/aggregation.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@competition-platform/format-sdk": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "react": "^19.2.4",
+    "typescript": "^5.7.0",
+    "vitest": "^2.0.0"
+  }
+}

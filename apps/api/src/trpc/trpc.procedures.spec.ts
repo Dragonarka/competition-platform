@@ -9,7 +9,8 @@ const testRouter = t.router({
   })),
 });
 
-const caller = (userId: string | null) => testRouter.createCaller({ userId });
+const caller = (userId: string | null) =>
+  testRouter.createCaller({ userId, clientIp: '127.0.0.1' });
 
 describe('protectedProcedure', () => {
   it('throws UNAUTHORIZED when userId is null', async () => {

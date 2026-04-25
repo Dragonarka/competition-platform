@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import { CompetitionGateway } from './gateways/competition.gateway';
 
-@Module({})
+@Module({
+  providers: [CompetitionGateway],
+  exports: [CompetitionGateway],
+})
 export class WebsocketModule {}

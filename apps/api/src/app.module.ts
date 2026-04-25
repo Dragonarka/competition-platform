@@ -4,9 +4,10 @@ import { AppService } from './app.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { DatabaseModule } from './modules/database/database.module';
 import { TrpcModule } from './trpc/trpc.module';
+import { WebsocketModule } from './modules/websocket/websocket.module';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TrpcModule],
+  imports: [DatabaseModule, AuthModule, WebsocketModule, TrpcModule],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -15,3 +15,9 @@ export const createCompetitionSchema = z.object({
 });
 
 export type CreateCompetitionInput = z.infer<typeof createCompetitionSchema>;
+
+export const startCypherPhaseSchema = z.object({
+  competitionId: z.string().min(1, 'Competition ID is required'),
+});
+
+export type StartCypherPhaseInput = z.infer<typeof startCypherPhaseSchema>;

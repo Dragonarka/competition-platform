@@ -1,0 +1,21 @@
+import Link from 'next/link';
+import { Suspense } from 'react';
+import { CompetitionList } from '@/components/admin/competition-list';
+import { CompetitionListSkeleton } from '@/components/admin/competition-list-skeleton';
+import { buttonVariants } from '@/components/ui/button';
+
+export default function CompetitionsPage() {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold text-foreground">Competitions</h1>
+        <Link href="/competitions/new" className={buttonVariants()}>
+          New Competition
+        </Link>
+      </div>
+      <Suspense fallback={<CompetitionListSkeleton />}>
+        <CompetitionList />
+      </Suspense>
+    </div>
+  );
+}

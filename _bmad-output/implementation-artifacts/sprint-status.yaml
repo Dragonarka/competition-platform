@@ -48,20 +48,20 @@ development_status:
   epic-1-retrospective: optional
 
   # ─── Epic 2: Competition Creation & Judge Access ───
-  epic-2: in-progress
+  epic-2: done
   2-1-create-a-competition: done
-  2-2-define-cypher-evaluation-criteria: backlog
-  2-3-register-participants: backlog
-  2-4-configure-judge-groups-and-advancement-rules: backlog
-  2-5-generate-and-share-judge-invite-links: backlog
-  epic-2-retrospective: optional
+  2-2-define-cypher-evaluation-criteria: done
+  2-3-register-participants: done
+  2-4-configure-judge-groups-and-advancement-rules: done
+  2-5-generate-and-share-judge-invite-links: done
+  epic-2-retrospective: done
 
   # ─── Epic 3: Live Cypher Scoring ───
-  epic-3: backlog
-  3-1-format-sdk-and-cypher-battles-format-definition: backlog
-  3-2-cypher-phase-start-and-judge-group-assignment: backlog
-  3-3-judge-scoring-interface-cypher-mode: backlog
-  3-4-real-time-score-aggregation-and-live-standings: backlog
+  epic-3: in-progress
+  3-1-format-sdk-and-cypher-battles-format-definition: done
+  3-2-cypher-phase-start-and-judge-group-assignment: done
+  3-3-judge-scoring-interface-cypher-mode: done
+  3-4-real-time-score-aggregation-and-live-standings: done
   3-5-offline-score-queue-and-connection-resilience: backlog
   3-6-cypher-phase-completion-and-advancement-review: backlog
   epic-3-retrospective: optional

@@ -1,0 +1,441 @@
+# Test Pipeline — scaffolded by BMad TEA (testarch-ci workflow)
+# Stack: fullstack (Next.js 16 + NestJS 11 + tRPC + Socket.IO)
+# Unit framework: Vitest (via turbo)  |  E2E framework: Playwright
+# Monorepo: pnpm workspaces + Turborepo
+#
+# Required CI secrets (configure in repo Settings → Secrets and variables → Actions):
+#   CLERK_SECRET_KEY, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+#   TEST_ORGANIZER_EMAIL, TEST_ORGANIZER_PASSWORD, TEST_ORGANIZER_CLERK_USER_ID
+# See docs/ci-secrets-checklist.md for the full list.
+
+name: Test Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Weekly burn-in on Sundays at 02:00 UTC — catches UI flakiness via repeated E2E runs
+    - cron: '0 2 * * 0'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: '9'
+  # Default test DB / cache targets for E2E and burn-in jobs (overridden by services)
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/competition_platform_test
+  TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/competition_platform_test
+  REDIS_URL: redis://localhost:6379
+  API_URL: http://localhost:3001
+  BASE_URL: http://localhost:3000
+  NEXT_PUBLIC_API_URL: http://localhost:3001
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Stage 1: Lint (fast, <2 min)
+  # ─────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js (from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  # ─────────────────────────────────────────────────────────────
+  # Stage 2: Unit tests (Vitest, <5 min)
+  # ─────────────────────────────────────────────────────────────
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js (from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests (turbo)
+        run: pnpm test -- --filter='!@competition-platform/tests'
+
+      - name: Build (verify compile)
+        run: pnpm build
+
+      - name: Upload unit test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: |
+            apps/*/coverage/
+            packages/*/coverage/
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────
+  # Stage 3: E2E tests (Playwright, parallel sharding)
+  # ─────────────────────────────────────────────────────────────
+  # Gated until Clerk test credentials + seed data are provisioned.
+  # Flip ENABLE_E2E to 'true' (or remove the `if:`) once secrets exist.
+  e2e:
+    name: E2E (Shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: unit
+    if: ${{ vars.ENABLE_E2E == 'true' || github.event_name == 'schedule' }}
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: competition_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    env:
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      TEST_ORGANIZER_EMAIL: ${{ secrets.TEST_ORGANIZER_EMAIL }}
+      TEST_ORGANIZER_PASSWORD: ${{ secrets.TEST_ORGANIZER_PASSWORD }}
+      TEST_ORGANIZER_CLERK_USER_ID: ${{ secrets.TEST_ORGANIZER_CLERK_USER_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js (from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @competition-platform/tests exec playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit path)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @competition-platform/tests exec playwright install-deps chromium
+
+      - name: Build apps
+        run: pnpm build
+
+      - name: Run DB migrations
+        run: pnpm --filter @competition-platform/db exec drizzle-kit migrate
+
+      - name: Start API (background)
+        run: pnpm --filter @competition-platform/api start:prod &
+        env:
+          PORT: '3001'
+          NODE_ENV: 'test'
+
+      - name: Start Web (background)
+        run: pnpm --filter @competition-platform/web start &
+        env:
+          PORT: '3000'
+          NODE_ENV: 'test'
+
+      - name: Wait for services
+        run: |
+          npx --yes wait-on "$API_URL/health" "$BASE_URL" --timeout 120000
+
+      - name: Run Playwright tests (shard ${{ matrix.shard }}/4)
+        run: >-
+          pnpm --filter @competition-platform/tests exec
+          playwright test --project=chromium
+          --shard=${{ matrix.shard }}/4
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: |
+            tests/playwright-report/
+            tests/test-results/
+          retention-days: 30
+
+      - name: Upload JUnit results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-shard-${{ matrix.shard }}
+          path: tests/test-results/junit.xml
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────
+  # Stage 4: Burn-in loop (flaky test detection, <60 min)
+  # ─────────────────────────────────────────────────────────────
+  # 10 full E2E iterations — any flake fails the job.
+  # Scoped to PRs and weekly schedule to avoid burning CI minutes.
+  burn-in:
+    name: Burn-In (Flaky Detection)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: e2e
+    if: ${{ (github.event_name == 'pull_request' || github.event_name == 'schedule') && (vars.ENABLE_E2E == 'true') }}
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: competition_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+      TEST_ORGANIZER_EMAIL: ${{ secrets.TEST_ORGANIZER_EMAIL }}
+      TEST_ORGANIZER_PASSWORD: ${{ secrets.TEST_ORGANIZER_PASSWORD }}
+      TEST_ORGANIZER_CLERK_USER_ID: ${{ secrets.TEST_ORGANIZER_CLERK_USER_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js (from .nvmrc)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @competition-platform/tests exec playwright install --with-deps chromium
+
+      - name: Build apps
+        run: pnpm build
+
+      - name: Run DB migrations
+        run: pnpm --filter @competition-platform/db exec drizzle-kit migrate
+
+      - name: Start API (background)
+        run: pnpm --filter @competition-platform/api start:prod &
+        env:
+          PORT: '3001'
+          NODE_ENV: 'test'
+
+      - name: Start Web (background)
+        run: pnpm --filter @competition-platform/web start &
+        env:
+          PORT: '3000'
+          NODE_ENV: 'test'
+
+      - name: Wait for services
+        run: npx --yes wait-on "$API_URL/health" "$BASE_URL" --timeout 120000
+
+      - name: Burn-in loop (10 iterations)
+        run: |
+          echo "🔥 Burn-in starting — 10 full E2E iterations, any flake fails the build"
+          for i in $(seq 1 10); do
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🔥 Iteration $i/10"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            pnpm --filter @competition-platform/tests exec playwright test --project=chromium || exit 1
+          done
+          echo "✅ Burn-in complete — no flaky tests detected"
+
+      - name: Upload burn-in failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: burn-in-failures
+          path: |
+            tests/playwright-report/
+            tests/test-results/
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────
+  # Stage 5: Report aggregation
+  # ─────────────────────────────────────────────────────────────
+  report:
+    name: Test Report
+    runs-on: ubuntu-latest
+    needs: [unit, e2e, burn-in]
+    if: always()
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+        continue-on-error: true
+
+      - name: Generate summary
+        run: |
+          {
+            echo "## Test Pipeline Summary"
+            echo ""
+            echo "| Stage      | Result                         |"
+            echo "|------------|--------------------------------|"
+            echo "| Unit       | ${{ needs.unit.result }}       |"
+            echo "| E2E        | ${{ needs.e2e.result }}        |"
+            echo "| Burn-In    | ${{ needs.burn-in.result }}    |"
+            echo ""
+            echo "- **Shards**: 4 (E2E)"
+            echo "- **Commit**: \`${{ github.sha }}\`"
+            echo "- **Ref**: \`${{ github.ref }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ needs.burn-in.result }}" = "failure" ]; then
+            echo "⚠️ **Flaky tests detected** — review burn-in-failures artifact" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Quality gate: mark the workflow as failed if any required stage failed.
+      # (Cancelled/skipped stages do NOT fail the gate — intentional for opt-in E2E.)
+      - name: Enforce quality gate
+        run: |
+          UNIT="${{ needs.unit.result }}"
+          E2E="${{ needs.e2e.result }}"
+          BURN="${{ needs.burn-in.result }}"
+          FAIL=0
+          [ "$UNIT" = "failure" ] && { echo "::error::Unit tests failed"; FAIL=1; }
+          [ "$E2E"  = "failure" ] && { echo "::error::E2E tests failed";  FAIL=1; }
+          [ "$BURN" = "failure" ] && { echo "::error::Burn-in detected flaky tests"; FAIL=1; }
+          exit $FAIL
+
+      # Failure notification via PR comment (no external secrets required).
+      # Extend with Slack/email by adding a step that reads SLACK_WEBHOOK from secrets.
+      - name: Comment on PR (failures only)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          UNIT_RESULT: ${{ needs.unit.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          BURN_RESULT: ${{ needs.burn-in.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            // Security: env: intermediaries used for all non-safe contexts
+            const body = [
+              '### ❌ Test Pipeline Failed',
+              '',
+              `| Stage | Result |`,
+              `|-------|--------|`,
+              `| Unit | ${process.env.UNIT_RESULT} |`,
+              `| E2E | ${process.env.E2E_RESULT} |`,
+              `| Burn-In | ${process.env.BURN_RESULT} |`,
+              '',
+              `[View run logs](${process.env.RUN_URL})`,
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+
+# ═══════════════════════════════════════════════════════════════════
+# SECURITY — Script Injection Prevention
+# ═══════════════════════════════════════════════════════════════════
+# If this pipeline is later extended with workflow_call / workflow_dispatch
+# or composite actions that accept ${{ inputs.* }} or ${{ github.event.* }}
+# user-controlled values, ALWAYS pass them through `env:` intermediaries
+# and reference as "$ENV_VAR" in run: blocks. NEVER interpolate directly.
+#
+# Inputs are DATA, not COMMANDS: do not accept command-shaped inputs
+# (e.g., install-command) that get executed as shell. Pass fixed commands
+# and treat inputs only as quoted arguments.
+# ═══════════════════════════════════════════════════════════════════
