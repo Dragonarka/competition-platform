@@ -83,6 +83,8 @@ export default function JudgePage() {
 
   const submitScoreMutation = trpc.tournament.submitScore.useMutation();
 
+  const [revoteNoticeMatchupId, setRevoteNoticeMatchupId] = useState<string | null>(null);
+
   const socketRef = useJudgeSocket({
     token,
     judgeSessionId: tokenData?.judgeSessionId ?? '',
@@ -95,9 +97,19 @@ export default function JudgePage() {
       void utils.tournament.getJudgeAssignments.invalidate({ token });
     },
     onVoteSubmitted: () => {
-      // Per AC #10, vote.submitted broadcasts to every per-judge room.
-      // Refetch on receipt so a judge's screen reflects bracket changes once
-      // Story 5.3 lands matchup.completed.
+      void utils.tournament.getBattlesAssignment.invalidate({ token });
+    },
+    onMatchupCompleted: () => {
+      void utils.tournament.getBattlesAssignment.invalidate({ token });
+    },
+    onMatchupRevoteRequired: (p) => {
+      setRevoteNoticeMatchupId(p.matchupId);
+      void utils.tournament.getBattlesAssignment.invalidate({ token });
+    },
+    onBracketAdvanced: () => {
+      void utils.tournament.getBattlesAssignment.invalidate({ token });
+    },
+    onCompetitionCompleted: () => {
       void utils.tournament.getBattlesAssignment.invalidate({ token });
     },
     onStatusChange: setConnectionStatus,
@@ -256,6 +268,8 @@ export default function JudgePage() {
         <BattlesVotingScreen
           token={token}
           enqueueVote={(s: QueuedVoteSubmission) => offlineQueue.enqueue(s)}
+          revoteNoticeMatchupId={revoteNoticeMatchupId}
+          onRevoteNoticeDismiss={() => setRevoteNoticeMatchupId(null)}
         />
       </main>
     );

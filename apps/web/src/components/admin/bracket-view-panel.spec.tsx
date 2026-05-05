@@ -180,6 +180,71 @@ describe('BracketViewPanel', () => {
     unmount();
   });
 
+  it('renders 🏆 champion banner when championCompetitorId is set (Story 5.3)', async () => {
+    getCompetitionMock.mockReturnValue({
+      data: { id: 'comp_1', cypherCompletedAt: '2026-05-04T15:00:00.000Z' },
+    });
+    getBracketMock.mockReturnValue({
+      data: {
+        matchups: [
+          {
+            id: 'm1',
+            roundNumber: 1,
+            bracketPosition: 0,
+            competitorAId: 'a',
+            competitorBId: 'b',
+            seedA: 1,
+            seedB: 2,
+            isBye: false,
+            winnerCompetitorId: 'a',
+            competitorA: { name: 'Alice', participantId: 'P-A' },
+            competitorB: { name: 'Bob', participantId: 'P-B' },
+          },
+        ],
+        championCompetitorId: 'a',
+        currentRoundNumber: null,
+      },
+      isLoading: false,
+    });
+
+    const { container, unmount } = await renderPanel();
+    expect(container.textContent).toContain('🏆 Champion');
+    expect(container.textContent).toContain('Alice');
+    unmount();
+  });
+
+  it('renders current round indicator when currentRoundNumber is set (Story 5.3)', async () => {
+    getCompetitionMock.mockReturnValue({
+      data: { id: 'comp_1', cypherCompletedAt: '2026-05-04T15:00:00.000Z' },
+    });
+    getBracketMock.mockReturnValue({
+      data: {
+        matchups: [
+          {
+            id: 'm1',
+            roundNumber: 2,
+            bracketPosition: 0,
+            competitorAId: 'a',
+            competitorBId: 'b',
+            seedA: 1,
+            seedB: 2,
+            isBye: false,
+            winnerCompetitorId: null,
+            competitorA: { name: 'Alice', participantId: 'P-A' },
+            competitorB: { name: 'Bob', participantId: 'P-B' },
+          },
+        ],
+        championCompetitorId: null,
+        currentRoundNumber: 2,
+      },
+      isLoading: false,
+    });
+
+    const { container, unmount } = await renderPanel();
+    expect(container.textContent).toContain('Current round');
+    unmount();
+  });
+
   it('shows the empty-bracket message when matchups list is empty after cypher completion', async () => {
     getCompetitionMock.mockReturnValue({
       data: { id: 'comp_1', cypherCompletedAt: '2026-05-04T15:00:00.000Z' },

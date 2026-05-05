@@ -1,6 +1,11 @@
 import type {
+  BracketAdvancedPayload,
   BracketGeneratedPayload,
+  CompetitionCompletedPayload,
   CompetitionStartedPayload,
+  MatchupCompletedPayload,
+  MatchupRevoteRequiredPayload,
+  MatchupTieResolutionRequiredPayload,
   PhaseTransitionedPayload,
 } from './tournament-events';
 import type {
@@ -20,6 +25,11 @@ export interface ServerToClientEvents {
   'phase.transitioned': (data: PhaseTransitionedPayload) => void;
   'bracket.generated': (data: BracketGeneratedPayload) => void;
   'vote.submitted': (data: VoteSubmittedPayload) => void;
+  'matchup.completed': (data: MatchupCompletedPayload) => void;
+  'matchup.revote-required': (data: MatchupRevoteRequiredPayload) => void;
+  'matchup.tie-resolution-required': (data: MatchupTieResolutionRequiredPayload) => void;
+  'bracket.advanced': (data: BracketAdvancedPayload) => void;
+  'competition.completed': (data: CompetitionCompletedPayload) => void;
   'judge.status-changed': (data: JudgeLiveStatus) => void;
   'competitor.withdrawn': (data: CompetitorWithdrawnPayload) => void;
   'competitor.rescued': (data: CompetitorRescuedPayload) => void;

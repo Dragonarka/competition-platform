@@ -12,7 +12,12 @@ import type {
   StandingsEntry,
   JudgeLiveStatus,
   PhaseTransitionedPayload,
+  BracketAdvancedPayload,
   BracketGeneratedPayload,
+  CompetitionCompletedPayload,
+  MatchupCompletedPayload,
+  MatchupRevoteRequiredPayload,
+  MatchupTieResolutionRequiredPayload,
   VoteSubmittedPayload,
 } from '@competition-platform/shared';
 
@@ -28,6 +33,11 @@ interface UseAdminSocketOptions {
   onPhaseTransitioned?: (p: PhaseTransitionedPayload) => void;
   onBracketGenerated?: (p: BracketGeneratedPayload) => void;
   onVoteSubmitted?: (p: VoteSubmittedPayload) => void;
+  onMatchupCompleted?: (p: MatchupCompletedPayload) => void;
+  onMatchupRevoteRequired?: (p: MatchupRevoteRequiredPayload) => void;
+  onMatchupTieResolutionRequired?: (p: MatchupTieResolutionRequiredPayload) => void;
+  onBracketAdvanced?: (p: BracketAdvancedPayload) => void;
+  onCompetitionCompleted?: (p: CompetitionCompletedPayload) => void;
   onCompetitorWithdrawn?: (p: CompetitorWithdrawnPayload) => void;
   onCompetitorRescued?: (p: CompetitorRescuedPayload) => void;
   onStatusChange?: (status: 'connected' | 'reconnecting' | 'disconnected') => void;
@@ -91,6 +101,26 @@ export function useAdminSocket(opts: UseAdminSocketOptions) {
 
     socket.on('vote.submitted', (p) => {
       optsRef.current.onVoteSubmitted?.(p);
+    });
+
+    socket.on('matchup.completed', (p) => {
+      optsRef.current.onMatchupCompleted?.(p);
+    });
+
+    socket.on('matchup.revote-required', (p) => {
+      optsRef.current.onMatchupRevoteRequired?.(p);
+    });
+
+    socket.on('matchup.tie-resolution-required', (p) => {
+      optsRef.current.onMatchupTieResolutionRequired?.(p);
+    });
+
+    socket.on('bracket.advanced', (p) => {
+      optsRef.current.onBracketAdvanced?.(p);
+    });
+
+    socket.on('competition.completed', (p) => {
+      optsRef.current.onCompetitionCompleted?.(p);
     });
 
     socket.on('competitor.withdrawn', (p) => {

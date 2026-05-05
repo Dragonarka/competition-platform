@@ -6,10 +6,14 @@ import {
   timestamp,
   uniqueIndex,
   index,
+  pgEnum,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { competitions } from './competitions';
 import { competitors } from './competitors';
+
+export const tieStatusEnum = pgEnum('tie_status', ['organizer_decision_pending']);
 
 export const battleMatchups = pgTable(
   'battle_matchups',
@@ -28,6 +32,11 @@ export const battleMatchups = pgTable(
     seedB: integer('seed_b'),
     isBye: boolean('is_bye').notNull().default(false),
     winnerCompetitorId: text('winner_competitor_id').references(() => competitors.id),
+    tieStatus: tieStatusEnum('tie_status'),
+    revoteCount: integer('revote_count').notNull().default(0),
+    organizerDecisionReason: text('organizer_decision_reason'),
+    organizerDecisionBy: text('organizer_decision_by'),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -37,6 +46,9 @@ export const battleMatchups = pgTable(
       table.bracketPosition,
     ),
     index('idx_battle_matchups_competition').on(table.competitionId),
+    index('idx_battle_matchups_tie_status')
+      .on(table.competitionId, table.tieStatus)
+      .where(sql`${table.tieStatus} IS NOT NULL`),
   ],
 );
 

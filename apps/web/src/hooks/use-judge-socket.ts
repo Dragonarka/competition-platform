@@ -5,6 +5,10 @@ import type { Socket } from 'socket.io-client';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
+  BracketAdvancedPayload,
+  CompetitionCompletedPayload,
+  MatchupCompletedPayload,
+  MatchupRevoteRequiredPayload,
   VoteSubmittedPayload,
 } from '@competition-platform/shared';
 
@@ -17,6 +21,10 @@ interface UseJudgeSocketOptions {
   onCompetitionStarted?: () => void;
   onScoreSubmitted?: () => void;
   onVoteSubmitted?: (payload: VoteSubmittedPayload) => void;
+  onMatchupCompleted?: (payload: MatchupCompletedPayload) => void;
+  onMatchupRevoteRequired?: (payload: MatchupRevoteRequiredPayload) => void;
+  onBracketAdvanced?: (payload: BracketAdvancedPayload) => void;
+  onCompetitionCompleted?: (payload: CompetitionCompletedPayload) => void;
   onStatusChange?: (status: 'connected' | 'reconnecting' | 'disconnected') => void;
 }
 
@@ -63,6 +71,22 @@ export function useJudgeSocket(opts: UseJudgeSocketOptions) {
 
     socket.on('vote.submitted', (p) => {
       optsRef.current.onVoteSubmitted?.(p);
+    });
+
+    socket.on('matchup.completed', (p) => {
+      optsRef.current.onMatchupCompleted?.(p);
+    });
+
+    socket.on('matchup.revote-required', (p) => {
+      optsRef.current.onMatchupRevoteRequired?.(p);
+    });
+
+    socket.on('bracket.advanced', (p) => {
+      optsRef.current.onBracketAdvanced?.(p);
+    });
+
+    socket.on('competition.completed', (p) => {
+      optsRef.current.onCompetitionCompleted?.(p);
     });
 
     // When the browser goes offline, Socket.IO will try to reconnect and emit

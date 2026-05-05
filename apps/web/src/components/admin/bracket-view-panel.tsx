@@ -106,6 +106,8 @@ export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
   }
 
   const matchups: BracketMatchup[] = bracket?.matchups ?? [];
+  const championCompetitorId = bracket?.championCompetitorId ?? null;
+  const currentRoundNumber = bracket?.currentRoundNumber ?? null;
 
   if (matchups.length === 0) {
     return (
@@ -136,12 +138,36 @@ export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
   const round1Count = rounds.get(1)?.length ?? 0;
   const totalRounds = round1Count > 0 ? Math.log2(round1Count) + 1 : orderedRounds.length;
 
+  let championName: string | null = null;
+  if (championCompetitorId) {
+    for (const m of matchups) {
+      if (m.competitorAId === championCompetitorId && m.competitorA) {
+        championName = m.competitorA.name;
+        break;
+      }
+      if (m.competitorBId === championCompetitorId && m.competitorB) {
+        championName = m.competitorB.name;
+        break;
+      }
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Battles Bracket</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {championCompetitorId && (
+          <div className="rounded-md border border-yellow-500/40 bg-yellow-50 px-4 py-3 text-sm font-semibold text-yellow-900 dark:bg-yellow-950/20 dark:text-yellow-200">
+            🏆 Champion: {championName ?? championCompetitorId}
+          </div>
+        )}
+        {currentRoundNumber !== null && (
+          <p className="text-xs text-muted-foreground">
+            Current round: {roundLabel(currentRoundNumber, totalRounds)}
+          </p>
+        )}
         {orderedRounds.map(([roundNumber, roundMatchups]) => (
           <section key={roundNumber} className="space-y-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">

@@ -397,6 +397,183 @@ describe('CompetitionGateway', () => {
     });
   });
 
+  // ─── Story 5.3 broadcasts: matchup.* + bracket.advanced + competition.completed ─
+
+  function seedTwoJudges(gateway: any): void {
+    gateway['judgePresence'].set(
+      'comp_1',
+      new Map([
+        [
+          's_1',
+          {
+            judgeSessionId: 's_1',
+            label: 'A',
+            groupIndex: null,
+            connected: true,
+            queueSize: 0,
+            lastSeenAt: null,
+          },
+        ],
+        [
+          's_2',
+          {
+            judgeSessionId: 's_2',
+            label: 'B',
+            groupIndex: null,
+            connected: false,
+            queueSize: 0,
+            lastSeenAt: null,
+          },
+        ],
+      ]) as any,
+    );
+  }
+
+  describe('broadcastMatchupCompleted', () => {
+    it('emits to admin + public + every per-judge room', () => {
+      const gateway = makeGateway();
+      const emitSpy = vi.fn();
+      const toSpy = vi
+        .fn()
+        .mockImplementation(() => ({ to: toSpy, emit: emitSpy }));
+      gateway.server = { to: toSpy } as any;
+      seedTwoJudges(gateway);
+
+      gateway.broadcastMatchupCompleted('comp_1', {
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        roundNumber: 1,
+        bracketPosition: 0,
+        winnerCompetitorId: 'c_a',
+        tally: { player1: 2, player2: 1, tie: 0, total: 3 },
+        advancedFromTie: false,
+        organizerDecisionReason: null,
+        completedAt: '2026-05-05T15:00:00.000Z',
+      });
+
+      const targetedRooms = toSpy.mock.calls.map((c) => c[0]);
+      expect(targetedRooms).toContain('competition:comp_1:admin');
+      expect(targetedRooms).toContain('competition:comp_1:public');
+      expect(targetedRooms).toContain('competition:comp_1:judge:s_1');
+      expect(targetedRooms).toContain('competition:comp_1:judge:s_2');
+      expect(emitSpy).toHaveBeenCalledWith(
+        'matchup.completed',
+        expect.objectContaining({ winnerCompetitorId: 'c_a' }),
+      );
+    });
+  });
+
+  describe('broadcastMatchupRevoteRequired', () => {
+    it('emits to admin + judges but NOT public', () => {
+      const gateway = makeGateway();
+      const emitSpy = vi.fn();
+      const toSpy = vi
+        .fn()
+        .mockImplementation(() => ({ to: toSpy, emit: emitSpy }));
+      gateway.server = { to: toSpy } as any;
+      seedTwoJudges(gateway);
+
+      gateway.broadcastMatchupRevoteRequired('comp_1', {
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        revoteCount: 1,
+        tally: { player1: 1, player2: 1, tie: 1, total: 3 },
+        detectedAt: '2026-05-05T15:00:00.000Z',
+      });
+
+      const targetedRooms = toSpy.mock.calls.map((c) => c[0]);
+      expect(targetedRooms).toContain('competition:comp_1:admin');
+      expect(targetedRooms).toContain('competition:comp_1:judge:s_1');
+      expect(targetedRooms).toContain('competition:comp_1:judge:s_2');
+      expect(targetedRooms).not.toContain('competition:comp_1:public');
+      expect(emitSpy).toHaveBeenCalledWith(
+        'matchup.revote-required',
+        expect.objectContaining({ revoteCount: 1 }),
+      );
+    });
+  });
+
+  describe('broadcastMatchupTieResolutionRequired', () => {
+    it('emits to admin room ONLY (not public, not judges)', () => {
+      const gateway = makeGateway();
+      const emitSpy = vi.fn();
+      const toSpy = vi.fn().mockReturnValue({ emit: emitSpy });
+      gateway.server = { to: toSpy } as any;
+      seedTwoJudges(gateway);
+
+      gateway.broadcastMatchupTieResolutionRequired('comp_1', {
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        tally: { player1: 1, player2: 1, tie: 1, total: 3 },
+        detectedAt: '2026-05-05T15:00:00.000Z',
+      });
+
+      const targetedRooms = toSpy.mock.calls.map((c) => c[0]);
+      expect(targetedRooms).toEqual(['competition:comp_1:admin']);
+      expect(targetedRooms).not.toContain('competition:comp_1:public');
+      expect(targetedRooms).not.toContain('competition:comp_1:judge:s_1');
+      expect(emitSpy).toHaveBeenCalledWith(
+        'matchup.tie-resolution-required',
+        expect.objectContaining({ matchupId: 'm_1' }),
+      );
+    });
+  });
+
+  describe('broadcastBracketAdvanced', () => {
+    it('emits to admin + public + every per-judge room', () => {
+      const gateway = makeGateway();
+      const emitSpy = vi.fn();
+      const toSpy = vi
+        .fn()
+        .mockImplementation(() => ({ to: toSpy, emit: emitSpy }));
+      gateway.server = { to: toSpy } as any;
+      seedTwoJudges(gateway);
+
+      gateway.broadcastBracketAdvanced('comp_1', {
+        competitionId: 'comp_1',
+        roundNumber: 2,
+        matchups: [],
+        advancedAt: '2026-05-05T15:00:00.000Z',
+      });
+
+      const targetedRooms = toSpy.mock.calls.map((c) => c[0]);
+      expect(targetedRooms).toContain('competition:comp_1:admin');
+      expect(targetedRooms).toContain('competition:comp_1:public');
+      expect(targetedRooms).toContain('competition:comp_1:judge:s_1');
+      expect(emitSpy).toHaveBeenCalledWith(
+        'bracket.advanced',
+        expect.objectContaining({ roundNumber: 2 }),
+      );
+    });
+  });
+
+  describe('broadcastCompetitionCompleted', () => {
+    it('emits to admin + public + every per-judge room', () => {
+      const gateway = makeGateway();
+      const emitSpy = vi.fn();
+      const toSpy = vi
+        .fn()
+        .mockImplementation(() => ({ to: toSpy, emit: emitSpy }));
+      gateway.server = { to: toSpy } as any;
+      seedTwoJudges(gateway);
+
+      gateway.broadcastCompetitionCompleted('comp_1', {
+        competitionId: 'comp_1',
+        championCompetitorId: 'champ',
+        completedAt: '2026-05-05T15:00:00.000Z',
+      });
+
+      const targetedRooms = toSpy.mock.calls.map((c) => c[0]);
+      expect(targetedRooms).toContain('competition:comp_1:admin');
+      expect(targetedRooms).toContain('competition:comp_1:public');
+      expect(targetedRooms).toContain('competition:comp_1:judge:s_1');
+      expect(emitSpy).toHaveBeenCalledWith(
+        'competition.completed',
+        expect.objectContaining({ championCompetitorId: 'champ' }),
+      );
+    });
+  });
+
   // ─── getJudgePresence + clearPresence ────────────────────────────────────────
 
   describe('getJudgePresence', () => {

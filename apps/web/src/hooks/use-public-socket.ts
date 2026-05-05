@@ -5,6 +5,9 @@ import type { Socket } from 'socket.io-client';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
+  BracketAdvancedPayload,
+  CompetitionCompletedPayload,
+  MatchupCompletedPayload,
   PhaseTransitionedPayload,
   StandingsEntry,
 } from '@competition-platform/shared';
@@ -16,25 +19,35 @@ interface UsePublicSocketOptions {
   competitionId: string;
   onStandingsUpdated?: (standings: StandingsEntry[]) => void;
   onPhaseTransitioned?: (payload: PhaseTransitionedPayload) => void;
+  onMatchupCompleted?: (payload: MatchupCompletedPayload) => void;
+  onBracketAdvanced?: (payload: BracketAdvancedPayload) => void;
+  onCompetitionCompleted?: (payload: CompetitionCompletedPayload) => void;
 }
 
 export function usePublicSocket({
   competitionId,
   onStandingsUpdated,
   onPhaseTransitioned,
+  onMatchupCompleted,
+  onBracketAdvanced,
+  onCompetitionCompleted,
 }: UsePublicSocketOptions) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const standingsCallbackRef = useRef(onStandingsUpdated);
   const phaseCallbackRef = useRef(onPhaseTransitioned);
-  // Keep refs current on every render without adding callbacks to socket effect deps.
+  const matchupCompletedRef = useRef(onMatchupCompleted);
+  const bracketAdvancedRef = useRef(onBracketAdvanced);
+  const competitionCompletedRef = useRef(onCompetitionCompleted);
   useEffect(() => {
     standingsCallbackRef.current = onStandingsUpdated;
     phaseCallbackRef.current = onPhaseTransitioned;
+    matchupCompletedRef.current = onMatchupCompleted;
+    bracketAdvancedRef.current = onBracketAdvanced;
+    competitionCompletedRef.current = onCompetitionCompleted;
   });
 
   useEffect(() => {
     const apiUrl = process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
-    // No token — anonymous public connection. Gateway assigns role: 'anonymous'.
     const socket = io(`${apiUrl}/competition`, {
       transports: ['websocket'],
     }) as PublicSocket;
@@ -53,6 +66,18 @@ export function usePublicSocket({
 
     socket.on('phase.transitioned', (payload) => {
       phaseCallbackRef.current?.(payload);
+    });
+
+    socket.on('matchup.completed', (payload) => {
+      matchupCompletedRef.current?.(payload);
+    });
+
+    socket.on('bracket.advanced', (payload) => {
+      bracketAdvancedRef.current?.(payload);
+    });
+
+    socket.on('competition.completed', (payload) => {
+      competitionCompletedRef.current?.(payload);
     });
 
     return () => {

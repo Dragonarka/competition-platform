@@ -69,3 +69,16 @@ export const submitOrganizerVoteSchema = z.object({
 });
 
 export type SubmitOrganizerVoteInput = z.infer<typeof submitOrganizerVoteSchema>;
+
+export const resolveTieSchema = z.object({
+  competitionId: z.string().min(1, 'Competition ID is required'),
+  matchupId: z.string().min(1, 'Matchup ID is required'),
+  winnerCompetitorId: z.string().min(1, 'Winner competitor ID is required'),
+  reason: z
+    .string()
+    .trim()
+    .min(4, 'Reason must be at least 4 characters')
+    .max(280, 'Reason must be 280 characters or less'),
+});
+
+export type ResolveTieInput = z.infer<typeof resolveTieSchema>;

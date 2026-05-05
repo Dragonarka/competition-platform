@@ -68,3 +68,100 @@ export interface BracketGeneratedEvent {
   createdAt: string;
   sequence: number;
 }
+
+export interface MatchupTallySnapshot {
+  player1: number;
+  player2: number;
+  tie: number;
+  total: number;
+}
+
+export interface MatchupCompletedPayload {
+  competitionId: string;
+  matchupId: string;
+  roundNumber: number;
+  bracketPosition: number;
+  winnerCompetitorId: string;
+  tally: MatchupTallySnapshot;
+  advancedFromTie: boolean;
+  organizerDecisionReason: string | null;
+  completedAt: string; // ISO 8601
+}
+
+export interface MatchupCompletedEvent {
+  type: 'matchup.completed';
+  aggregateId: string; // competitionId
+  aggregateType: 'competition';
+  payload: MatchupCompletedPayload;
+  createdBy: string;
+  createdAt: string;
+  sequence: number;
+}
+
+export interface MatchupRevoteRequiredPayload {
+  competitionId: string;
+  matchupId: string;
+  revoteCount: number;
+  tally: MatchupTallySnapshot;
+  detectedAt: string; // ISO 8601
+}
+
+export interface MatchupRevoteRequiredEvent {
+  type: 'matchup.revote-required';
+  aggregateId: string;
+  aggregateType: 'competition';
+  payload: MatchupRevoteRequiredPayload;
+  createdBy: string;
+  createdAt: string;
+  sequence: number;
+}
+
+export interface MatchupTieResolutionRequiredPayload {
+  competitionId: string;
+  matchupId: string;
+  tally: MatchupTallySnapshot;
+  detectedAt: string; // ISO 8601
+}
+
+export interface MatchupTieResolutionRequiredEvent {
+  type: 'matchup.tie-resolution-required';
+  aggregateId: string;
+  aggregateType: 'competition';
+  payload: MatchupTieResolutionRequiredPayload;
+  createdBy: string;
+  createdAt: string;
+  sequence: number;
+}
+
+export interface BracketAdvancedPayload {
+  competitionId: string;
+  roundNumber: number; // the NEW round being materialized
+  matchups: BracketMatchupSnapshot[];
+  advancedAt: string; // ISO 8601
+}
+
+export interface BracketAdvancedEvent {
+  type: 'bracket.advanced';
+  aggregateId: string;
+  aggregateType: 'competition';
+  payload: BracketAdvancedPayload;
+  createdBy: string;
+  createdAt: string;
+  sequence: number;
+}
+
+export interface CompetitionCompletedPayload {
+  competitionId: string;
+  championCompetitorId: string;
+  completedAt: string; // ISO 8601
+}
+
+export interface CompetitionCompletedEvent {
+  type: 'competition.completed';
+  aggregateId: string;
+  aggregateType: 'competition';
+  payload: CompetitionCompletedPayload;
+  createdBy: string;
+  createdAt: string;
+  sequence: number;
+}

@@ -25,6 +25,11 @@ const mockGateway: ICompetitionGateway = {
   broadcastPhaseTransitioned: vi.fn(),
   broadcastBracketGenerated: vi.fn(),
   broadcastVoteSubmitted: vi.fn(),
+  broadcastMatchupCompleted: vi.fn(),
+  broadcastMatchupRevoteRequired: vi.fn(),
+  broadcastMatchupTieResolutionRequired: vi.fn(),
+  broadcastBracketAdvanced: vi.fn(),
+  broadcastCompetitionCompleted: vi.fn(),
   broadcastJudgeStatusChanged: vi.fn(),
   broadcastScoreOverridden: vi.fn(),
   broadcastCompetitorWithdrawn: vi.fn(),
@@ -679,6 +684,11 @@ function makeFullGateway(): ICompetitionGateway {
     broadcastPhaseTransitioned: vi.fn(),
     broadcastBracketGenerated: vi.fn(),
     broadcastVoteSubmitted: vi.fn(),
+    broadcastMatchupCompleted: vi.fn(),
+    broadcastMatchupRevoteRequired: vi.fn(),
+    broadcastMatchupTieResolutionRequired: vi.fn(),
+    broadcastBracketAdvanced: vi.fn(),
+    broadcastCompetitionCompleted: vi.fn(),
     broadcastJudgeStatusChanged: vi.fn(),
     broadcastCompetitorWithdrawn: vi.fn(),
     broadcastCompetitorRescued: vi.fn(),
@@ -4196,10 +4206,13 @@ function makeSubmitVoteDb(
   let callIdx = 0;
   let insertCallIdx = 0;
   const insertSpies: Array<{ values: ReturnType<typeof vi.fn> }> = [];
+  const updateSpies: Array<{ set: ReturnType<typeof vi.fn> }> = [];
+  const deleteSpies: Array<{ where: ReturnType<typeof vi.fn> }> = [];
   const txMock = {
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
     innerJoin: vi.fn().mockReturnThis(),
+    orderBy: vi.fn().mockReturnThis(),
     where: vi
       .fn()
       .mockImplementation(() =>
@@ -4214,6 +4227,19 @@ function makeSubmitVoteDb(
       insertSpies.push({ values: valuesSpy });
       return { values: valuesSpy };
     }),
+    update: vi.fn(() => {
+      const setSpy = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      });
+      updateSpies.push({ set: setSpy });
+      return { set: setSpy };
+    }),
+    delete: vi.fn(() => {
+      const whereSpy = vi.fn().mockResolvedValue([]);
+      deleteSpies.push({ where: whereSpy });
+      return { where: whereSpy };
+    }),
+    execute: vi.fn().mockResolvedValue(undefined),
   };
   return {
     db: {
@@ -4222,6 +4248,9 @@ function makeSubmitVoteDb(
       },
     } as any,
     insertSpies,
+    updateSpies,
+    deleteSpies,
+    txMock,
   };
 }
 
@@ -4847,5 +4876,480 @@ describe('tournament.submitOrganizerVote', () => {
     expect(eventArgs.type).toBe('vote.submitted');
     expect(eventArgs.sequence).toBe(8);
     expect(gateway.broadcastVoteSubmitted).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Story 5.3: processMatchupOutcome via submitVote ──────────────────────────
+
+describe('tournament.submitVote → processMatchupOutcome (Story 5.3)', () => {
+  // Helper: builds the selectResults sequence for the standard
+  // [auth, idempotency-miss, ACTIVE_BATTLES, OPEN_MATCHUP, maxSeq] prefix
+  // followed by the helper's own selects.
+  const PREFIX = (maxSeq = 0) => [
+    [VOTING_SESSION],
+    [], // idempotency miss
+    [ACTIVE_BATTLES],
+    [OPEN_MATCHUP],
+    [{ maxSeq }], // submitVote sequence
+  ];
+
+  const MATCHUP_LOADED = {
+    id: 'm_1',
+    competitionId: 'comp_1',
+    roundNumber: 1,
+    bracketPosition: 0,
+    competitorAId: 'c_a',
+    competitorBId: 'c_b',
+    isBye: false,
+    winnerCompetitorId: null,
+    tieStatus: null,
+    revoteCount: 0,
+  };
+
+  it('pending: helper returns null when fewer than expected votes', async () => {
+    const { db, insertSpies } = makeSubmitVoteDb([
+      ...PREFIX(0),
+      [MATCHUP_LOADED], // helper: matchup row
+      [{ vote: 'player1' }], // helper: votes (only 1 of 3 expected)
+      [{ count: 3 }], // helper: expectedVotes
+    ]);
+    const gateway = makeFullGateway();
+    await makeCallerFor(db, gateway).tournament.submitVote({
+      token: 'tok',
+      matchupId: 'm_1',
+      vote: 'player1',
+      idempotencyKey: 'k_pending',
+    });
+    expect(insertSpies).toHaveLength(2); // vote + vote.submitted only
+    expect(gateway.broadcastMatchupCompleted).not.toHaveBeenCalled();
+    expect(gateway.broadcastBracketAdvanced).not.toHaveBeenCalled();
+  });
+
+  it('clear winner: writes matchup.completed + advances or completes', async () => {
+    // 4 of 4 expected, 3 player1 / 1 player2 → winner A.
+    // Then maybeAdvanceRound: only this matchup in the round → final → completion.
+    const { db, insertSpies } = makeSubmitVoteDb([
+      ...PREFIX(10),
+      [MATCHUP_LOADED],
+      [
+        { vote: 'player1' },
+        { vote: 'player1' },
+        { vote: 'player1' },
+        { vote: 'player2' },
+      ],
+      [{ count: 4 }],
+      // matchup.completed event sequence
+      [{ maxSeq: 11 }],
+      // maybeAdvanceRound → roundRows after winner update
+      [
+        {
+          id: 'm_1',
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          seedA: 1,
+          seedB: 2,
+          isBye: false,
+          winnerCompetitorId: 'c_a',
+          tieStatus: null,
+        },
+      ],
+      // competition.completed event sequence
+      [{ maxSeq: 12 }],
+    ]);
+    const gateway = makeFullGateway();
+    await makeCallerFor(db, gateway).tournament.submitVote({
+      token: 'tok',
+      matchupId: 'm_1',
+      vote: 'player2',
+      idempotencyKey: 'k_winner',
+    });
+    expect(gateway.broadcastMatchupCompleted).toHaveBeenCalledTimes(1);
+    const completedPayload = (gateway.broadcastMatchupCompleted as any).mock
+      .calls[0][1];
+    expect(completedPayload.winnerCompetitorId).toBe('c_a');
+    expect(completedPayload.advancedFromTie).toBe(false);
+    expect(gateway.broadcastCompetitionCompleted).toHaveBeenCalledTimes(1);
+    const compCompletedPayload = (gateway.broadcastCompetitionCompleted as any)
+      .mock.calls[0][1];
+    expect(compCompletedPayload.championCompetitorId).toBe('c_a');
+    expect(insertSpies.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('tie + re_vote: deletes votes, increments revoteCount, broadcasts revote-required', async () => {
+    const { db, insertSpies, deleteSpies, updateSpies } = makeSubmitVoteDb([
+      ...PREFIX(20),
+      [MATCHUP_LOADED],
+      [{ vote: 'player1' }, { vote: 'player2' }, { vote: 'tie' }],
+      [{ count: 3 }],
+      [{ tieBreakingRule: 're_vote' }],
+      [{ maxSeq: 21 }],
+    ]);
+    const gateway = makeFullGateway();
+    await makeCallerFor(db, gateway).tournament.submitVote({
+      token: 'tok',
+      matchupId: 'm_1',
+      vote: 'tie',
+      idempotencyKey: 'k_revote',
+    });
+    expect(deleteSpies.length).toBeGreaterThanOrEqual(1);
+    expect(gateway.broadcastMatchupRevoteRequired).toHaveBeenCalledTimes(1);
+    const revotePayload = (gateway.broadcastMatchupRevoteRequired as any).mock
+      .calls[0][1];
+    expect(revotePayload.revoteCount).toBe(1);
+    expect(gateway.broadcastMatchupCompleted).not.toHaveBeenCalled();
+    expect(updateSpies.length).toBeGreaterThanOrEqual(1);
+    expect(insertSpies.length).toBeGreaterThanOrEqual(3); // vote, vote.submitted, matchup.revote-required
+  });
+
+  it('tie + organizer_decision: sets tieStatus, admin-only broadcast, no public broadcast', async () => {
+    const { db, updateSpies } = makeSubmitVoteDb([
+      ...PREFIX(30),
+      [MATCHUP_LOADED],
+      [{ vote: 'player1' }, { vote: 'player2' }, { vote: 'tie' }],
+      [{ count: 3 }],
+      [{ tieBreakingRule: 'organizer_decision' }],
+      [{ maxSeq: 31 }],
+    ]);
+    const gateway = makeFullGateway();
+    await makeCallerFor(db, gateway).tournament.submitVote({
+      token: 'tok',
+      matchupId: 'm_1',
+      vote: 'tie',
+      idempotencyKey: 'k_org',
+    });
+    expect(gateway.broadcastMatchupTieResolutionRequired).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(gateway.broadcastMatchupCompleted).not.toHaveBeenCalled();
+    expect(gateway.broadcastMatchupRevoteRequired).not.toHaveBeenCalled();
+    expect(updateSpies.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('skips tally when matchup is in tie-resolution limbo', async () => {
+    // submitVote's matchup-load uses OPEN_MATCHUP (winner null), but then the
+    // helper re-loads with tieStatus=organizer_decision_pending → returns null.
+    const LIMBO = {
+      ...MATCHUP_LOADED,
+      tieStatus: 'organizer_decision_pending',
+    };
+    const { db } = makeSubmitVoteDb([
+      ...PREFIX(50),
+      [LIMBO], // helper: limbo state
+    ]);
+    const gateway = makeFullGateway();
+    await makeCallerFor(db, gateway).tournament.submitVote({
+      token: 'tok',
+      matchupId: 'm_1',
+      vote: 'player1',
+      idempotencyKey: 'k_limbo',
+    });
+    expect(gateway.broadcastMatchupCompleted).not.toHaveBeenCalled();
+    expect(gateway.broadcastMatchupRevoteRequired).not.toHaveBeenCalled();
+    expect(
+      gateway.broadcastMatchupTieResolutionRequired,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('round advancement: 4-bracket round 1, last winner triggers bracket.advanced with 1 round-2 matchup', async () => {
+    // 4-matchup round 1 already had 3 winners; this vote produces the 4th.
+    // After update, round contains 4 winners → buildNextRound emits 2 round-2
+    // matchups; but wait — to get to "final" branch we'd need single-matchup round.
+    // Here we test round advancement (multi-matchup → next round).
+    const M2 = { ...MATCHUP_LOADED, bracketPosition: 3 };
+    const { db } = makeSubmitVoteDb([
+      ...PREFIX(60),
+      [M2],
+      [{ vote: 'player1' }, { vote: 'player1' }, { vote: 'player1' }],
+      [{ count: 3 }],
+      [{ maxSeq: 61 }], // matchup.completed seq
+      // maybeAdvanceRound → roundRows for round 1 (4 matchups, all resolved)
+      [
+        {
+          id: 'p_0',
+          bracketPosition: 0,
+          competitorAId: 'c1',
+          competitorBId: 'c2',
+          seedA: 1,
+          seedB: 8,
+          isBye: false,
+          winnerCompetitorId: 'c1',
+          tieStatus: null,
+        },
+        {
+          id: 'p_1',
+          bracketPosition: 1,
+          competitorAId: 'c3',
+          competitorBId: 'c4',
+          seedA: 4,
+          seedB: 5,
+          isBye: false,
+          winnerCompetitorId: 'c4',
+          tieStatus: null,
+        },
+        {
+          id: 'p_2',
+          bracketPosition: 2,
+          competitorAId: 'c5',
+          competitorBId: 'c6',
+          seedA: 2,
+          seedB: 7,
+          isBye: false,
+          winnerCompetitorId: 'c5',
+          tieStatus: null,
+        },
+        {
+          id: 'p_3',
+          bracketPosition: 3,
+          competitorAId: 'c7',
+          competitorBId: 'c8',
+          seedA: 3,
+          seedB: 6,
+          isBye: false,
+          winnerCompetitorId: 'c7',
+          tieStatus: null,
+        },
+      ],
+      [{ maxSeq: 62 }], // bracket.advanced seq
+    ]);
+    const gateway = makeFullGateway();
+    await makeCallerFor(db, gateway).tournament.submitVote({
+      token: 'tok',
+      matchupId: 'm_1',
+      vote: 'player1',
+      idempotencyKey: 'k_adv',
+    });
+    expect(gateway.broadcastMatchupCompleted).toHaveBeenCalledTimes(1);
+    expect(gateway.broadcastBracketAdvanced).toHaveBeenCalledTimes(1);
+    const advPayload = (gateway.broadcastBracketAdvanced as any).mock
+      .calls[0][1];
+    expect(advPayload.roundNumber).toBe(2);
+    expect(advPayload.matchups).toHaveLength(2);
+    expect(gateway.broadcastCompetitionCompleted).not.toHaveBeenCalled();
+  });
+
+  it('Review fix H1: maps 23505 on matchup.completed event insert to INTERNAL_SERVER_ERROR', async () => {
+    // Insert order in the clear-winner path:
+    //   0: votes, 1: vote.submitted event, 2: matchup.completed event ← collide
+    const conflict = Object.assign(new Error('duplicate'), { code: '23505' });
+    const { db } = makeSubmitVoteDb(
+      [
+        ...PREFIX(0),
+        [MATCHUP_LOADED],
+        [{ vote: 'player1' }, { vote: 'player1' }, { vote: 'player1' }],
+        [{ count: 3 }],
+        [{ maxSeq: 1 }],
+      ],
+      { insertThrowsPerCall: [undefined, undefined, conflict] },
+    );
+    const err = await makeCallerFor(db, makeFullGateway())
+      .tournament.submitVote({
+        token: 'tok',
+        matchupId: 'm_1',
+        vote: 'player1',
+        idempotencyKey: 'k_h1',
+      })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+  });
+
+  it('Review fix M2: returns no broadcasts when matchup belongs to a different competition', async () => {
+    // The submitVote ownership check passes (OPEN_MATCHUP.competitionId =
+    // 'comp_1'), but inside the helper the re-loaded matchup row reports
+    // competitionId='other_comp'. Defense-in-depth guard short-circuits.
+    const FOREIGN = { ...MATCHUP_LOADED, competitionId: 'other_comp' };
+    const { db } = makeSubmitVoteDb([...PREFIX(0), [FOREIGN]]);
+    const gateway = makeFullGateway();
+    await makeCallerFor(db, gateway).tournament.submitVote({
+      token: 'tok',
+      matchupId: 'm_1',
+      vote: 'player1',
+      idempotencyKey: 'k_m2',
+    });
+    expect(gateway.broadcastMatchupCompleted).not.toHaveBeenCalled();
+    expect(gateway.broadcastMatchupRevoteRequired).not.toHaveBeenCalled();
+    expect(
+      gateway.broadcastMatchupTieResolutionRequired,
+    ).not.toHaveBeenCalled();
+    expect(gateway.broadcastBracketAdvanced).not.toHaveBeenCalled();
+    expect(gateway.broadcastCompetitionCompleted).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Story 5.3: tournament.resolveTie ────────────────────────────────────────
+
+describe('tournament.resolveTie (Story 5.3)', () => {
+  it('rejects when userId is null (UNAUTHORIZED)', async () => {
+    await expect(
+      caller(null).tournament.resolveTie({
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        winnerCompetitorId: 'c_a',
+        reason: 'A had cleaner footwork',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('rejects empty reason via Zod (TIE_RESOLUTION_REASON_REQUIRED)', async () => {
+    await expect(
+      caller('user_x').tournament.resolveTie({
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        winnerCompetitorId: 'c_a',
+        reason: '   ',
+      }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('rejects reason shorter than 4 chars via Zod', async () => {
+    await expect(
+      caller('user_x').tournament.resolveTie({
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        winnerCompetitorId: 'c_a',
+        reason: 'abc',
+      }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('rejects reason longer than 280 chars via Zod', async () => {
+    await expect(
+      caller('user_x').tournament.resolveTie({
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        winnerCompetitorId: 'c_a',
+        reason: 'a'.repeat(281),
+      }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('throws NOT_FOUND when matchup is missing or not owned', async () => {
+    const { db } = makeSubmitVoteDb([[]]);
+    await expect(
+      makeCallerFor(db, makeFullGateway(), 'user_x').tournament.resolveTie({
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        winnerCompetitorId: 'c_a',
+        reason: 'Cleaner footwork',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws MATCHUP_NOT_TIED when tieStatus is not pending', async () => {
+    const { db } = makeSubmitVoteDb([
+      [
+        {
+          matchupId: 'm_1',
+          competitionId: 'comp_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          tieStatus: null,
+          winnerCompetitorId: null,
+        },
+      ],
+    ]);
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_x')
+      .tournament.resolveTie({
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        winnerCompetitorId: 'c_a',
+        reason: 'Cleaner footwork',
+      })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'BAD_REQUEST' });
+    expect((err as any).cause).toMatchObject({
+      errorCode: 'MATCHUP_NOT_TIED',
+    });
+  });
+
+  it('throws WINNER_NOT_IN_MATCHUP when winnerCompetitorId is unrelated', async () => {
+    const { db } = makeSubmitVoteDb([
+      [
+        {
+          matchupId: 'm_1',
+          competitionId: 'comp_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          tieStatus: 'organizer_decision_pending',
+          winnerCompetitorId: null,
+        },
+      ],
+    ]);
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_x')
+      .tournament.resolveTie({
+        competitionId: 'comp_1',
+        matchupId: 'm_1',
+        winnerCompetitorId: 'c_zzz',
+        reason: 'Cleaner footwork',
+      })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'BAD_REQUEST' });
+    expect((err as any).cause).toMatchObject({
+      errorCode: 'WINNER_NOT_IN_MATCHUP',
+    });
+  });
+
+  it('happy path: writes matchup.completed (advancedFromTie=true) + completes competition', async () => {
+    const { db, insertSpies, updateSpies } = makeSubmitVoteDb([
+      // 1. ownership check → returns matchup row
+      [
+        {
+          matchupId: 'm_1',
+          competitionId: 'comp_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          tieStatus: 'organizer_decision_pending',
+          winnerCompetitorId: null,
+        },
+      ],
+      // 3. votes for tally re-aggregation
+      [{ vote: 'player1' }, { vote: 'player2' }, { vote: 'tie' }],
+      // 5. matchup.completed event seq
+      [{ maxSeq: 100 }],
+      // maybeAdvanceRound: round 1 has 1 matchup (this one) all resolved → final
+      [
+        {
+          id: 'm_1',
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          seedA: 1,
+          seedB: 2,
+          isBye: false,
+          winnerCompetitorId: 'c_a',
+          tieStatus: null,
+        },
+      ],
+      // competition.completed seq
+      [{ maxSeq: 101 }],
+    ]);
+    const gateway = makeFullGateway();
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_x',
+    ).tournament.resolveTie({
+      competitionId: 'comp_1',
+      matchupId: 'm_1',
+      winnerCompetitorId: 'c_a',
+      reason: 'Cleaner footwork won the round',
+    });
+    expect(result).toEqual({ success: true, matchupId: 'm_1' });
+    expect(updateSpies.length).toBeGreaterThanOrEqual(1);
+    expect(gateway.broadcastMatchupCompleted).toHaveBeenCalledTimes(1);
+    const payload = (gateway.broadcastMatchupCompleted as any).mock.calls[0][1];
+    expect(payload.advancedFromTie).toBe(true);
+    expect(payload.organizerDecisionReason).toBe(
+      'Cleaner footwork won the round',
+    );
+    expect(payload.winnerCompetitorId).toBe('c_a');
+    expect(gateway.broadcastCompetitionCompleted).toHaveBeenCalledTimes(1);
+    expect(insertSpies.length).toBeGreaterThanOrEqual(2);
   });
 });

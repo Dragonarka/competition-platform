@@ -38,12 +38,19 @@ import {
   submitOrganizerScoreSchema,
   submitVoteSchema,
   submitOrganizerVoteSchema,
+  resolveTieSchema,
   ErrorCodes,
 } from '@competition-platform/shared';
 import type {
+  BracketAdvancedPayload,
   BracketGeneratedPayload,
+  BracketMatchupSnapshot,
   BracketSeed,
+  CompetitionCompletedPayload,
   CompetitionStartedPayload,
+  MatchupCompletedPayload,
+  MatchupRevoteRequiredPayload,
+  MatchupTieResolutionRequiredPayload,
   PhaseTransitionedPayload,
   ScoreSubmittedPayload,
   ScoreOverriddenPayload,
@@ -64,7 +71,467 @@ import type { DatabaseService } from '../../modules/database/database.service';
 import type { ICompetitionGateway } from '../../modules/websocket/competition-gateway.interface';
 import { roundRobinAssign } from '../../modules/competition/domain/group-assigner';
 import { generateBracket } from '../../modules/competition/domain/bracket-generator';
+import {
+  tallyMatchup,
+  type VoteTally,
+} from '../../modules/competition/domain/vote-tallier';
+import { buildNextRound } from '../../modules/competition/domain/round-builder';
 import { enforceRateLimit } from '../rate-limit';
+import type { Db } from '../../modules/database/database.service';
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+interface MatchupOutcomeBroadcasts {
+  matchupCompleted: MatchupCompletedPayload | null;
+  matchupRevoteRequired: MatchupRevoteRequiredPayload | null;
+  matchupTieResolutionRequired: MatchupTieResolutionRequiredPayload | null;
+  bracketAdvanced: BracketAdvancedPayload | null;
+  competitionCompleted: CompetitionCompletedPayload | null;
+}
+
+const EMPTY_BROADCASTS: MatchupOutcomeBroadcasts = {
+  matchupCompleted: null,
+  matchupRevoteRequired: null,
+  matchupTieResolutionRequired: null,
+  bracketAdvanced: null,
+  competitionCompleted: null,
+};
+
+function emitMatchupBroadcasts(
+  gateway: ICompetitionGateway,
+  competitionId: string,
+  broadcasts: MatchupOutcomeBroadcasts,
+): void {
+  if (broadcasts.matchupCompleted) {
+    gateway.broadcastMatchupCompleted(
+      competitionId,
+      broadcasts.matchupCompleted,
+    );
+  }
+  if (broadcasts.matchupRevoteRequired) {
+    gateway.broadcastMatchupRevoteRequired(
+      competitionId,
+      broadcasts.matchupRevoteRequired,
+    );
+  }
+  if (broadcasts.matchupTieResolutionRequired) {
+    gateway.broadcastMatchupTieResolutionRequired(
+      competitionId,
+      broadcasts.matchupTieResolutionRequired,
+    );
+  }
+  if (broadcasts.bracketAdvanced) {
+    gateway.broadcastBracketAdvanced(competitionId, broadcasts.bracketAdvanced);
+  }
+  if (broadcasts.competitionCompleted) {
+    gateway.broadcastCompetitionCompleted(
+      competitionId,
+      broadcasts.competitionCompleted,
+    );
+  }
+}
+
+async function nextEventSequence(
+  tx: Tx,
+  competitionId: string,
+): Promise<number> {
+  const [seqRow] = await tx
+    .select({ maxSeq: max(events.sequence) })
+    .from(events)
+    .where(
+      and(
+        eq(events.aggregateId, competitionId),
+        eq(events.aggregateType, 'competition'),
+      ),
+    );
+  return (seqRow?.maxSeq ?? 0) + 1;
+}
+
+// Per-matchup advisory locks serialise outcome computation, but two distinct
+// matchups completing concurrently in the same competition can still race on
+// the events table sequence. Mirror submitVote's vote.submitted handling: map
+// the sequence collision to INTERNAL_SERVER_ERROR so the client retries.
+async function insertEventOrRetry(
+  tx: Tx,
+  values: typeof events.$inferInsert,
+): Promise<void> {
+  try {
+    await tx.insert(events).values(values);
+  } catch (err: unknown) {
+    if ((err as { code?: string }).code === '23505') {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Concurrent submission conflict, please retry',
+      });
+    }
+    throw err;
+  }
+}
+
+async function maybeAdvanceRound(
+  tx: Tx,
+  args: {
+    competitionId: string;
+    justCompletedRound: number;
+    organizerClerkId: string | null;
+  },
+): Promise<{
+  bracketAdvanced: BracketAdvancedPayload | null;
+  competitionCompleted: CompetitionCompletedPayload | null;
+}> {
+  const { competitionId, justCompletedRound, organizerClerkId } = args;
+
+  // 1. Are there still unresolved non-bye matchups in this round?
+  const roundRows = await tx
+    .select({
+      id: battleMatchups.id,
+      bracketPosition: battleMatchups.bracketPosition,
+      competitorAId: battleMatchups.competitorAId,
+      competitorBId: battleMatchups.competitorBId,
+      seedA: battleMatchups.seedA,
+      seedB: battleMatchups.seedB,
+      isBye: battleMatchups.isBye,
+      winnerCompetitorId: battleMatchups.winnerCompetitorId,
+      tieStatus: battleMatchups.tieStatus,
+    })
+    .from(battleMatchups)
+    .where(
+      and(
+        eq(battleMatchups.competitionId, competitionId),
+        eq(battleMatchups.roundNumber, justCompletedRound),
+      ),
+    )
+    .orderBy(asc(battleMatchups.bracketPosition));
+
+  const unresolved = roundRows.filter((r) => r.winnerCompetitorId === null);
+  if (unresolved.length > 0) {
+    return { bracketAdvanced: null, competitionCompleted: null };
+  }
+
+  const winners = roundRows.map((r) => ({
+    bracketPosition: r.bracketPosition,
+    winnerCompetitorId: r.winnerCompetitorId as string,
+  }));
+
+  // 2. Final round? Only one matchup means this winner is the champion.
+  if (roundRows.length === 1) {
+    const champion = roundRows[0].winnerCompetitorId as string;
+    await tx
+      .update(competitions)
+      .set({ status: 'completed', updatedAt: new Date() })
+      .where(eq(competitions.id, competitionId));
+
+    const seq = await nextEventSequence(tx, competitionId);
+    const completedAt = new Date().toISOString();
+    const payload: CompetitionCompletedPayload = {
+      competitionId,
+      championCompetitorId: champion,
+      completedAt,
+    };
+    await insertEventOrRetry(tx, {
+      type: 'competition.completed',
+      aggregateId: competitionId,
+      aggregateType: 'competition',
+      payload: payload as unknown as Record<string, unknown>,
+      sequence: seq,
+      createdBy: organizerClerkId ?? 'system',
+    });
+    return { bracketAdvanced: null, competitionCompleted: payload };
+  }
+
+  // 3. Otherwise, materialize round N+1 from these winners.
+  const seedByCompetitorId = new Map<string, number>();
+  for (const r of roundRows) {
+    const winnerId = r.winnerCompetitorId;
+    if (winnerId === null) continue;
+    if (winnerId === r.competitorAId && r.seedA !== null) {
+      seedByCompetitorId.set(winnerId, r.seedA);
+    } else if (winnerId === r.competitorBId && r.seedB !== null) {
+      seedByCompetitorId.set(winnerId, r.seedB);
+    }
+  }
+
+  const nextRound = buildNextRound({
+    priorRoundNumber: justCompletedRound,
+    winners,
+    seedByCompetitorId,
+  });
+
+  // Defensive: buildNextRound can short-circuit (odd winners → silently
+  // skipped pairing). Don't broadcast a misleading bracket.advanced with
+  // an empty matchups array.
+  if (nextRound.length === 0) {
+    return { bracketAdvanced: null, competitionCompleted: null };
+  }
+
+  const newRoundNumber = justCompletedRound + 1;
+  let conflictHit = false;
+  for (const m of nextRound) {
+    try {
+      await tx.insert(battleMatchups).values({
+        competitionId,
+        roundNumber: m.roundNumber,
+        bracketPosition: m.bracketPosition,
+        competitorAId: m.competitorAId,
+        competitorBId: m.competitorBId,
+        seedA: m.seedA,
+        seedB: m.seedB,
+        isBye: false,
+      });
+    } catch (err: unknown) {
+      if ((err as { code?: string }).code !== '23505') throw err;
+      // Idempotent on uq_battle_matchups_position. Defer to a single re-read
+      // below so the broadcast reflects DB truth, not the in-memory plan.
+      conflictHit = true;
+    }
+  }
+
+  let matchupSnapshots: BracketMatchupSnapshot[];
+  if (conflictHit) {
+    const existing = await tx
+      .select({
+        roundNumber: battleMatchups.roundNumber,
+        bracketPosition: battleMatchups.bracketPosition,
+        competitorAId: battleMatchups.competitorAId,
+        competitorBId: battleMatchups.competitorBId,
+        seedA: battleMatchups.seedA,
+        seedB: battleMatchups.seedB,
+        isBye: battleMatchups.isBye,
+      })
+      .from(battleMatchups)
+      .where(
+        and(
+          eq(battleMatchups.competitionId, competitionId),
+          eq(battleMatchups.roundNumber, newRoundNumber),
+        ),
+      )
+      .orderBy(asc(battleMatchups.bracketPosition));
+    matchupSnapshots = existing.map((r) => ({
+      roundNumber: r.roundNumber,
+      bracketPosition: r.bracketPosition,
+      competitorAId: r.competitorAId,
+      competitorBId: r.competitorBId,
+      seedA: r.seedA,
+      seedB: r.seedB,
+      isBye: r.isBye,
+    }));
+  } else {
+    matchupSnapshots = nextRound.map((m) => ({
+      roundNumber: m.roundNumber,
+      bracketPosition: m.bracketPosition,
+      competitorAId: m.competitorAId,
+      competitorBId: m.competitorBId,
+      seedA: m.seedA,
+      seedB: m.seedB,
+      isBye: false,
+    }));
+  }
+
+  const seq = await nextEventSequence(tx, competitionId);
+  const payload: BracketAdvancedPayload = {
+    competitionId,
+    roundNumber: newRoundNumber,
+    matchups: matchupSnapshots,
+    advancedAt: new Date().toISOString(),
+  };
+  await insertEventOrRetry(tx, {
+    type: 'bracket.advanced',
+    aggregateId: competitionId,
+    aggregateType: 'competition',
+    payload: payload as unknown as Record<string, unknown>,
+    sequence: seq,
+    createdBy: organizerClerkId ?? 'system',
+  });
+
+  return { bracketAdvanced: payload, competitionCompleted: null };
+}
+
+async function processMatchupOutcome(
+  tx: Tx,
+  args: {
+    competitionId: string;
+    matchupId: string;
+    organizerClerkId: string | null;
+  },
+): Promise<MatchupOutcomeBroadcasts> {
+  const { competitionId, matchupId, organizerClerkId } = args;
+
+  // Concurrency guard: serialise outcome computation per matchup so two
+  // simultaneous votes can't both observe "all votes in" and double-write.
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`matchup-outcome:${matchupId}`}))`,
+  );
+
+  const [matchup] = await tx
+    .select({
+      id: battleMatchups.id,
+      competitionId: battleMatchups.competitionId,
+      roundNumber: battleMatchups.roundNumber,
+      bracketPosition: battleMatchups.bracketPosition,
+      competitorAId: battleMatchups.competitorAId,
+      competitorBId: battleMatchups.competitorBId,
+      isBye: battleMatchups.isBye,
+      winnerCompetitorId: battleMatchups.winnerCompetitorId,
+      tieStatus: battleMatchups.tieStatus,
+      revoteCount: battleMatchups.revoteCount,
+    })
+    .from(battleMatchups)
+    .where(eq(battleMatchups.id, matchupId));
+  if (!matchup) return EMPTY_BROADCASTS;
+  // Defense-in-depth: callers verify ownership, but the helper is now used in
+  // three places — cross-check that the matchup we loaded actually belongs to
+  // the claimed competition before mutating its state.
+  if (matchup.competitionId !== competitionId) return EMPTY_BROADCASTS;
+  if (matchup.isBye) return EMPTY_BROADCASTS;
+  if (matchup.winnerCompetitorId !== null) return EMPTY_BROADCASTS;
+  if (matchup.tieStatus === 'organizer_decision_pending') {
+    return EMPTY_BROADCASTS;
+  }
+
+  const competitorAId = matchup.competitorAId;
+  const competitorBId = matchup.competitorBId;
+  if (!competitorAId || !competitorBId) return EMPTY_BROADCASTS;
+
+  // Aggregate votes for this matchup.
+  const voteRows = await tx
+    .select({ vote: votes.vote })
+    .from(votes)
+    .where(eq(votes.matchupId, matchupId));
+  const tally: VoteTally = { player1: 0, player2: 0, tie: 0, total: 0 };
+  for (const v of voteRows) {
+    if (v.vote === 'player1') tally.player1 += 1;
+    else if (v.vote === 'player2') tally.player2 += 1;
+    else if (v.vote === 'tie') tally.tie += 1;
+    tally.total += 1;
+  }
+
+  // Expected = number of judge sessions for this competition.
+  const expectedRow = await tx
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(judgeSessions)
+    .where(eq(judgeSessions.competitionId, competitionId));
+  const expectedVotes = expectedRow[0]?.count ?? 0;
+  if (expectedVotes <= 0) return EMPTY_BROADCASTS;
+
+  const outcome = tallyMatchup({
+    tally,
+    expectedVotes,
+    competitorAId,
+    competitorBId,
+  });
+
+  if (outcome.kind === 'pending') return EMPTY_BROADCASTS;
+
+  if (outcome.kind === 'winner') {
+    const completedAt = new Date();
+    await tx
+      .update(battleMatchups)
+      .set({
+        winnerCompetitorId: outcome.winnerCompetitorId,
+        completedAt,
+      })
+      .where(eq(battleMatchups.id, matchupId));
+
+    const seq = await nextEventSequence(tx, competitionId);
+    const payload: MatchupCompletedPayload = {
+      competitionId,
+      matchupId,
+      roundNumber: matchup.roundNumber,
+      bracketPosition: matchup.bracketPosition,
+      winnerCompetitorId: outcome.winnerCompetitorId,
+      tally,
+      advancedFromTie: false,
+      organizerDecisionReason: null,
+      completedAt: completedAt.toISOString(),
+    };
+    await insertEventOrRetry(tx, {
+      type: 'matchup.completed',
+      aggregateId: competitionId,
+      aggregateType: 'competition',
+      payload: payload as unknown as Record<string, unknown>,
+      sequence: seq,
+      createdBy: organizerClerkId ?? 'system',
+    });
+
+    const adv = await maybeAdvanceRound(tx, {
+      competitionId,
+      justCompletedRound: matchup.roundNumber,
+      organizerClerkId,
+    });
+
+    return {
+      matchupCompleted: payload,
+      matchupRevoteRequired: null,
+      matchupTieResolutionRequired: null,
+      bracketAdvanced: adv.bracketAdvanced,
+      competitionCompleted: adv.competitionCompleted,
+    };
+  }
+
+  // Tie path — branch on competition's tieBreakingRule.
+  const [comp] = await tx
+    .select({ tieBreakingRule: competitions.tieBreakingRule })
+    .from(competitions)
+    .where(eq(competitions.id, competitionId));
+  const rule = comp?.tieBreakingRule ?? 're_vote';
+  const detectedAt = new Date().toISOString();
+
+  if (rule === 're_vote') {
+    await tx.delete(votes).where(eq(votes.matchupId, matchupId));
+    const newRevoteCount = (matchup.revoteCount ?? 0) + 1;
+    await tx
+      .update(battleMatchups)
+      .set({ revoteCount: newRevoteCount })
+      .where(eq(battleMatchups.id, matchupId));
+
+    const seq = await nextEventSequence(tx, competitionId);
+    const payload: MatchupRevoteRequiredPayload = {
+      competitionId,
+      matchupId,
+      revoteCount: newRevoteCount,
+      tally,
+      detectedAt,
+    };
+    await insertEventOrRetry(tx, {
+      type: 'matchup.revote-required',
+      aggregateId: competitionId,
+      aggregateType: 'competition',
+      payload: payload as unknown as Record<string, unknown>,
+      sequence: seq,
+      createdBy: organizerClerkId ?? 'system',
+    });
+    return {
+      ...EMPTY_BROADCASTS,
+      matchupRevoteRequired: payload,
+    };
+  }
+
+  // organizer_decision
+  await tx
+    .update(battleMatchups)
+    .set({ tieStatus: 'organizer_decision_pending' })
+    .where(eq(battleMatchups.id, matchupId));
+
+  const seq = await nextEventSequence(tx, competitionId);
+  const payload: MatchupTieResolutionRequiredPayload = {
+    competitionId,
+    matchupId,
+    tally,
+    detectedAt,
+  };
+  await insertEventOrRetry(tx, {
+    type: 'matchup.tie-resolution-required',
+    aggregateId: competitionId,
+    aggregateType: 'competition',
+    payload: payload as unknown as Record<string, unknown>,
+    sequence: seq,
+    createdBy: organizerClerkId ?? 'system',
+  });
+  return {
+    ...EMPTY_BROADCASTS,
+    matchupTieResolutionRequired: payload,
+  };
+}
 
 const PUBLIC_RL = { windowMs: 60_000, max: 60 };
 const SUBMIT_RL = { windowMs: 60_000, max: 30 };
@@ -1333,7 +1800,7 @@ export function createTournamentRouter(
           );
 
           const [comp] = await tx
-            .select({ id: competitions.id })
+            .select({ id: competitions.id, status: competitions.status })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));
           if (!comp) {
@@ -1354,6 +1821,11 @@ export function createTournamentRouter(
               seedB: battleMatchups.seedB,
               isBye: battleMatchups.isBye,
               winnerCompetitorId: battleMatchups.winnerCompetitorId,
+              tieStatus: battleMatchups.tieStatus,
+              revoteCount: battleMatchups.revoteCount,
+              organizerDecisionReason: battleMatchups.organizerDecisionReason,
+              organizerDecisionBy: battleMatchups.organizerDecisionBy,
+              completedAt: battleMatchups.completedAt,
             })
             .from(battleMatchups)
             .where(eq(battleMatchups.competitionId, input.competitionId))
@@ -1384,9 +1856,37 @@ export function createTournamentRouter(
             }
           }
 
+          // Champion: when competition is completed, the highest-round matchup
+          // with a winnerCompetitorId is the champion.
+          let championCompetitorId: string | null = null;
+          if (comp.status === 'completed') {
+            let maxRound = -1;
+            for (const r of rows) {
+              if (r.winnerCompetitorId !== null && r.roundNumber > maxRound) {
+                maxRound = r.roundNumber;
+                championCompetitorId = r.winnerCompetitorId;
+              }
+            }
+          }
+
+          // Current round: lowest round with at least one unresolved non-bye
+          // matchup. Null when bracket is empty or fully resolved.
+          let currentRoundNumber: number | null = null;
+          for (const r of rows) {
+            if (r.winnerCompetitorId === null && !r.isBye) {
+              if (
+                currentRoundNumber === null ||
+                r.roundNumber < currentRoundNumber
+              ) {
+                currentRoundNumber = r.roundNumber;
+              }
+            }
+          }
+
           return {
             matchups: rows.map((r) => ({
               ...r,
+              completedAt: r.completedAt ? r.completedAt.toISOString() : null,
               competitorA: r.competitorAId
                 ? (names[r.competitorAId] ?? null)
                 : null,
@@ -1394,6 +1894,8 @@ export function createTournamentRouter(
                 ? (names[r.competitorBId] ?? null)
                 : null,
             })),
+            championCompetitorId,
+            currentRoundNumber,
           };
         });
       }),
@@ -1884,6 +2386,7 @@ export function createTournamentRouter(
       .mutation(async ({ ctx, input }) => {
         enforceRateLimit(`submitVote:${ctx.clientIp ?? 'unknown'}`, SUBMIT_RL);
         let broadcastPayload: VoteSubmittedPayload | null = null;
+        let outcomeBroadcasts: MatchupOutcomeBroadcasts = EMPTY_BROADCASTS;
         const result = await db.db.transaction(async (tx) => {
           // 1. Validate token.
           const hash = createHash('sha256').update(input.token).digest('hex');
@@ -2039,6 +2542,14 @@ export function createTournamentRouter(
           }
 
           broadcastPayload = payload;
+
+          // Story 5.3 — tally + advancement after the vote is persisted.
+          outcomeBroadcasts = await processMatchupOutcome(tx, {
+            competitionId: session.competitionId,
+            matchupId: input.matchupId,
+            organizerClerkId: null,
+          });
+
           return { success: true as const, idempotent: false as const };
         });
 
@@ -2047,6 +2558,11 @@ export function createTournamentRouter(
           gateway.broadcastVoteSubmitted(
             finalPayload.competitionId,
             finalPayload,
+          );
+          emitMatchupBroadcasts(
+            gateway,
+            finalPayload.competitionId,
+            outcomeBroadcasts,
           );
         }
         return result;
@@ -2299,6 +2815,7 @@ export function createTournamentRouter(
       .input(submitOrganizerVoteSchema)
       .mutation(async ({ ctx, input }) => {
         let broadcastPayload: VoteSubmittedPayload | null = null;
+        let outcomeBroadcasts: MatchupOutcomeBroadcasts = EMPTY_BROADCASTS;
         const result = await db.db.transaction(async (tx) => {
           await tx.execute(
             sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
@@ -2498,6 +3015,14 @@ export function createTournamentRouter(
           }
 
           broadcastPayload = payload;
+
+          // Story 5.3 — tally + advancement on solo-mode organizer votes too.
+          outcomeBroadcasts = await processMatchupOutcome(tx, {
+            competitionId: input.competitionId,
+            matchupId: input.matchupId,
+            organizerClerkId: ctx.userId,
+          });
+
           return { success: true as const, idempotent: false as const };
         });
 
@@ -2507,7 +3032,148 @@ export function createTournamentRouter(
             finalPayload.competitionId,
             finalPayload,
           );
+          emitMatchupBroadcasts(
+            gateway,
+            finalPayload.competitionId,
+            outcomeBroadcasts,
+          );
         }
+        return result;
+      }),
+
+    resolveTie: protectedProcedure
+      .input(resolveTieSchema)
+      .mutation(async ({ ctx, input }) => {
+        let outcomeBroadcasts: MatchupOutcomeBroadcasts = EMPTY_BROADCASTS;
+        const result = await db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+
+          // 1. Ownership check + matchup load (single round-trip).
+          const [row] = await tx
+            .select({
+              matchupId: battleMatchups.id,
+              competitionId: battleMatchups.competitionId,
+              roundNumber: battleMatchups.roundNumber,
+              bracketPosition: battleMatchups.bracketPosition,
+              competitorAId: battleMatchups.competitorAId,
+              competitorBId: battleMatchups.competitorBId,
+              tieStatus: battleMatchups.tieStatus,
+              winnerCompetitorId: battleMatchups.winnerCompetitorId,
+            })
+            .from(battleMatchups)
+            .innerJoin(
+              competitions,
+              eq(competitions.id, battleMatchups.competitionId),
+            )
+            .where(
+              and(
+                eq(battleMatchups.id, input.matchupId),
+                eq(battleMatchups.competitionId, input.competitionId),
+                eq(competitions.organizerClerkId, ctx.userId),
+              ),
+            );
+          if (!row) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Matchup not found',
+              cause: { errorCode: ErrorCodes.MATCHUP_NOT_FOUND },
+            });
+          }
+
+          // 2. Guards.
+          if (row.tieStatus !== 'organizer_decision_pending') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Matchup is not awaiting tie resolution',
+              cause: { errorCode: ErrorCodes.MATCHUP_NOT_TIED },
+            });
+          }
+          if (
+            input.winnerCompetitorId !== row.competitorAId &&
+            input.winnerCompetitorId !== row.competitorBId
+          ) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'Winner must be one of the two competitors in the matchup',
+              cause: { errorCode: ErrorCodes.WINNER_NOT_IN_MATCHUP },
+            });
+          }
+
+          // Concurrency: serialise on this matchup so a late vote can't race.
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext(${`matchup-outcome:${input.matchupId}`}))`,
+          );
+
+          // 3. Re-aggregate tally for the audit footprint.
+          const voteRows = await tx
+            .select({ vote: votes.vote })
+            .from(votes)
+            .where(eq(votes.matchupId, input.matchupId));
+          const tally: VoteTally = { player1: 0, player2: 0, tie: 0, total: 0 };
+          for (const v of voteRows) {
+            if (v.vote === 'player1') tally.player1 += 1;
+            else if (v.vote === 'player2') tally.player2 += 1;
+            else if (v.vote === 'tie') tally.tie += 1;
+            tally.total += 1;
+          }
+
+          // 4. UPDATE matchup with winner + clear limbo + audit columns.
+          const completedAt = new Date();
+          await tx
+            .update(battleMatchups)
+            .set({
+              winnerCompetitorId: input.winnerCompetitorId,
+              tieStatus: null,
+              organizerDecisionReason: input.reason,
+              organizerDecisionBy: ctx.userId,
+              completedAt,
+            })
+            .where(eq(battleMatchups.id, input.matchupId));
+
+          // 5. Append matchup.completed event with advancedFromTie=true.
+          const seq = await nextEventSequence(tx, input.competitionId);
+          const payload: MatchupCompletedPayload = {
+            competitionId: input.competitionId,
+            matchupId: input.matchupId,
+            roundNumber: row.roundNumber,
+            bracketPosition: row.bracketPosition,
+            winnerCompetitorId: input.winnerCompetitorId,
+            tally,
+            advancedFromTie: true,
+            organizerDecisionReason: input.reason,
+            completedAt: completedAt.toISOString(),
+          };
+          await insertEventOrRetry(tx, {
+            type: 'matchup.completed',
+            aggregateId: input.competitionId,
+            aggregateType: 'competition',
+            payload: payload as unknown as Record<string, unknown>,
+            sequence: seq,
+            createdBy: ctx.userId,
+          });
+
+          // 6. Round advancement / competition completion in same tx.
+          const adv = await maybeAdvanceRound(tx, {
+            competitionId: input.competitionId,
+            justCompletedRound: row.roundNumber,
+            organizerClerkId: ctx.userId,
+          });
+
+          outcomeBroadcasts = {
+            matchupCompleted: payload,
+            matchupRevoteRequired: null,
+            matchupTieResolutionRequired: null,
+            bracketAdvanced: adv.bracketAdvanced,
+            competitionCompleted: adv.competitionCompleted,
+          };
+
+          return { success: true as const, matchupId: input.matchupId };
+        });
+
+        emitMatchupBroadcasts(gateway, input.competitionId, outcomeBroadcasts);
         return result;
       }),
 

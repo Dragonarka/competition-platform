@@ -130,6 +130,24 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
       void utils.tournament.getBracket.invalidate({ competitionId });
     },
 
+    onMatchupCompleted: () => {
+      void utils.tournament.getBracket.invalidate({ competitionId });
+    },
+    onMatchupRevoteRequired: () => {
+      void utils.tournament.getBracket.invalidate({ competitionId });
+    },
+    onMatchupTieResolutionRequired: () => {
+      void utils.tournament.getBracket.invalidate({ competitionId });
+    },
+    onBracketAdvanced: () => {
+      void utils.tournament.getBracket.invalidate({ competitionId });
+    },
+    onCompetitionCompleted: () => {
+      void utils.tournament.getBracket.invalidate({ competitionId });
+      void utils.tournament.getCompetition.invalidate({ competitionId });
+      void utils.tournament.getDashboardSnapshot.invalidate({ competitionId });
+    },
+
     onCompetitorWithdrawn: () => {
       void utils.tournament.listCompetitorsWithStatus.invalidate({ competitionId });
       void utils.tournament.getStandings.invalidate({ competitionId });

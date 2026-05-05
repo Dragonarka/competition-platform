@@ -26,7 +26,13 @@ interface RenderResult {
   unmount: () => void;
 }
 
-async function render(enqueueVote = vi.fn()): Promise<RenderResult> {
+async function render(
+  enqueueVote = vi.fn(),
+  extra: {
+    revoteNoticeMatchupId?: string | null;
+    onRevoteNoticeDismiss?: () => void;
+  } = {},
+): Promise<RenderResult> {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -35,6 +41,8 @@ async function render(enqueueVote = vi.fn()): Promise<RenderResult> {
       createElement(BattlesVotingScreen, {
         token: 'tok-1',
         enqueueVote,
+        revoteNoticeMatchupId: extra.revoteNoticeMatchupId ?? null,
+        onRevoteNoticeDismiss: extra.onRevoteNoticeDismiss,
       }),
     );
   });
@@ -231,6 +239,54 @@ describe('BattlesVotingScreen', () => {
       matchupId: 'm-1',
       vote: 'player1',
     });
+    unmount();
+  });
+
+  it('shows the re-vote notice when revoteNoticeMatchupId matches the current matchup (Story 5.3)', async () => {
+    getBattlesAssignmentMock.mockReturnValue({
+      data: {
+        battlesActive: true,
+        currentMatchup: {
+          matchupId: 'm-1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorA: { id: 'a', name: 'Alice', participantId: 'P-A', seed: 1 },
+          competitorB: { id: 'b', name: 'Bob', participantId: 'P-B', seed: 4 },
+        },
+        judgeSessionId: 'js',
+        label: 'J1',
+        competitionId: 'c1',
+      },
+      isLoading: false,
+    });
+    const { container, unmount } = await render(vi.fn(), {
+      revoteNoticeMatchupId: 'm-1',
+    });
+    expect(container.textContent).toContain('Tied vote — re-voting');
+    unmount();
+  });
+
+  it('hides the re-vote notice when revoteNoticeMatchupId is for a different matchup', async () => {
+    getBattlesAssignmentMock.mockReturnValue({
+      data: {
+        battlesActive: true,
+        currentMatchup: {
+          matchupId: 'm-1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorA: { id: 'a', name: 'Alice', participantId: 'P-A', seed: 1 },
+          competitorB: { id: 'b', name: 'Bob', participantId: 'P-B', seed: 4 },
+        },
+        judgeSessionId: 'js',
+        label: 'J1',
+        competitionId: 'c1',
+      },
+      isLoading: false,
+    });
+    const { container, unmount } = await render(vi.fn(), {
+      revoteNoticeMatchupId: 'm-other',
+    });
+    expect(container.textContent).not.toContain('Tied vote');
     unmount();
   });
 });

@@ -13,8 +13,13 @@ import { and, eq } from 'drizzle-orm';
 import { Server, Socket } from 'socket.io';
 import { judgeSessions, competitions } from '@competition-platform/db';
 import type {
+  BracketAdvancedPayload,
   BracketGeneratedPayload,
+  CompetitionCompletedPayload,
   CompetitionStartedPayload,
+  MatchupCompletedPayload,
+  MatchupRevoteRequiredPayload,
+  MatchupTieResolutionRequiredPayload,
   PhaseTransitionedPayload,
   ScoreSubmittedPayload,
   ScoreOverriddenPayload,
@@ -477,6 +482,116 @@ export class CompetitionGateway
     target.emit('vote.submitted', payload);
     this.logger.log(
       `Broadcast vote.submitted for ${competitionId} (matchup=${payload.matchupId}, admin + ${judgeRoomCount} judge room(s))`,
+    );
+  }
+
+  broadcastMatchupCompleted(
+    competitionId: string,
+    payload: MatchupCompletedPayload,
+  ): void {
+    // Admin + public + every per-judge room (Story 5.3 fan-out matrix).
+    const adminRoom = `competition:${competitionId}:admin`;
+    const publicRoom = `competition:${competitionId}:public`;
+    let target = this.server.to(adminRoom).to(publicRoom);
+    const judgeMap = this.judgePresence.get(competitionId);
+    let judgeRoomCount = 0;
+    if (judgeMap) {
+      for (const judgeSessionId of judgeMap.keys()) {
+        target = target.to(
+          `competition:${competitionId}:judge:${judgeSessionId}`,
+        );
+        judgeRoomCount++;
+      }
+    }
+    target.emit('matchup.completed', payload);
+    this.logger.log(
+      `Broadcast matchup.completed for ${competitionId} (matchup=${payload.matchupId}, winner=${payload.winnerCompetitorId}, admin + public + ${judgeRoomCount} judge room(s))`,
+    );
+  }
+
+  broadcastMatchupRevoteRequired(
+    competitionId: string,
+    payload: MatchupRevoteRequiredPayload,
+  ): void {
+    // Admin + every per-judge room (judges must re-cast). NOT public —
+    // spectators see no diagnostic until the re-vote resolves.
+    const adminRoom = `competition:${competitionId}:admin`;
+    let target = this.server.to(adminRoom);
+    const judgeMap = this.judgePresence.get(competitionId);
+    let judgeRoomCount = 0;
+    if (judgeMap) {
+      for (const judgeSessionId of judgeMap.keys()) {
+        target = target.to(
+          `competition:${competitionId}:judge:${judgeSessionId}`,
+        );
+        judgeRoomCount++;
+      }
+    }
+    target.emit('matchup.revote-required', payload);
+    this.logger.log(
+      `Broadcast matchup.revote-required for ${competitionId} (matchup=${payload.matchupId}, revoteCount=${payload.revoteCount}, admin + ${judgeRoomCount} judge room(s))`,
+    );
+  }
+
+  broadcastMatchupTieResolutionRequired(
+    competitionId: string,
+    payload: MatchupTieResolutionRequiredPayload,
+  ): void {
+    // Admin room ONLY. Spectators see no diagnostic; judges have already cast
+    // their votes (organizer-decision is a human-judgment limbo).
+    const adminRoom = `competition:${competitionId}:admin`;
+    this.server.to(adminRoom).emit('matchup.tie-resolution-required', payload);
+    this.logger.log(
+      `Broadcast matchup.tie-resolution-required (admin) for ${competitionId} (matchup=${payload.matchupId})`,
+    );
+  }
+
+  broadcastBracketAdvanced(
+    competitionId: string,
+    payload: BracketAdvancedPayload,
+  ): void {
+    // Admin + public + every per-judge room. Judges need to refetch their
+    // assignment query; public spectators see new pairings; admin updates panel.
+    const adminRoom = `competition:${competitionId}:admin`;
+    const publicRoom = `competition:${competitionId}:public`;
+    let target = this.server.to(adminRoom).to(publicRoom);
+    const judgeMap = this.judgePresence.get(competitionId);
+    let judgeRoomCount = 0;
+    if (judgeMap) {
+      for (const judgeSessionId of judgeMap.keys()) {
+        target = target.to(
+          `competition:${competitionId}:judge:${judgeSessionId}`,
+        );
+        judgeRoomCount++;
+      }
+    }
+    target.emit('bracket.advanced', payload);
+    this.logger.log(
+      `Broadcast bracket.advanced for ${competitionId} (round=${payload.roundNumber}, matchups=${payload.matchups.length}, admin + public + ${judgeRoomCount} judge room(s))`,
+    );
+  }
+
+  broadcastCompetitionCompleted(
+    competitionId: string,
+    payload: CompetitionCompletedPayload,
+  ): void {
+    // Admin + public + every per-judge room. Final state visible everywhere.
+    const adminRoom = `competition:${competitionId}:admin`;
+    const publicRoom = `competition:${competitionId}:public`;
+    let target = this.server.to(adminRoom).to(publicRoom);
+    const judgeMap = this.judgePresence.get(competitionId);
+    let judgeRoomCount = 0;
+    if (judgeMap) {
+      for (const judgeSessionId of judgeMap.keys()) {
+        target = target.to(
+          `competition:${competitionId}:judge:${judgeSessionId}`,
+        );
+        judgeRoomCount++;
+      }
+    }
+    target.emit('competition.completed', payload);
+    this.logger.log(
+      `Broadcast competition.completed for ${competitionId} (champion=${payload.championCompetitorId}, admin + public + ${judgeRoomCount} judge room(s))`,
     );
   }
 

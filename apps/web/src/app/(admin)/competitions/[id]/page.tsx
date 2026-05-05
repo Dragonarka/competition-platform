@@ -7,6 +7,7 @@ import { StartCypherPhasePanel } from '@/components/admin/start-cypher-phase-pan
 import { CypherResultsPanel } from '@/components/admin/cypher-results-panel';
 import { BracketViewPanel } from '@/components/admin/bracket-view-panel';
 import { BattlesVotingPanel } from '@/components/admin/battles-voting-panel';
+import { TieResolutionBanner } from '@/components/admin/tie-resolution-banner';
 import { LiveDashboardLink } from '@/components/admin/live-dashboard-link';
 import { CompetitorManagementPanel } from '@/components/admin/competitor-management-panel';
 import { SoloScoringPanel } from '@/components/admin/solo-scoring-panel';
@@ -25,6 +26,7 @@ export default async function CompetitionConfigPage({
       </div>
       <SoloScoringPanel competitionId={id} />
       <CypherResultsPanel competitionId={id} />
+      <TieResolutionBanner competitionId={id} />
       <BattlesVotingPanel competitionId={id} />
       <BracketViewPanel competitionId={id} />
       <StartCypherPhasePanel competitionId={id} />

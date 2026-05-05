@@ -49,6 +49,10 @@ interface HookOptions {
   onCompetitionStarted?: ReturnType<typeof vi.fn>;
   onScoreSubmitted?: ReturnType<typeof vi.fn>;
   onVoteSubmitted?: ReturnType<typeof vi.fn>;
+  onMatchupCompleted?: ReturnType<typeof vi.fn>;
+  onMatchupRevoteRequired?: ReturnType<typeof vi.fn>;
+  onBracketAdvanced?: ReturnType<typeof vi.fn>;
+  onCompetitionCompleted?: ReturnType<typeof vi.fn>;
   onStatusChange?: ReturnType<typeof vi.fn>;
 }
 
@@ -60,6 +64,10 @@ function buildHook(options: HookOptions = {}) {
     onCompetitionStarted = vi.fn(),
     onScoreSubmitted = vi.fn(),
     onVoteSubmitted = vi.fn(),
+    onMatchupCompleted = vi.fn(),
+    onMatchupRevoteRequired = vi.fn(),
+    onBracketAdvanced = vi.fn(),
+    onCompetitionCompleted = vi.fn(),
     onStatusChange = vi.fn(),
   } = options;
 
@@ -73,6 +81,10 @@ function buildHook(options: HookOptions = {}) {
     onCompetitionStarted,
     onScoreSubmitted,
     onVoteSubmitted,
+    onMatchupCompleted,
+    onMatchupRevoteRequired,
+    onBracketAdvanced,
+    onCompetitionCompleted,
     onStatusChange,
   };
 
@@ -168,5 +180,78 @@ describe('useJudgeSocket', () => {
     await hook.mount();
     hook.unmount();
     expect(fakeSocket.disconnect).toHaveBeenCalledOnce();
+  });
+
+  it('forwards matchup.completed events to onMatchupCompleted (Story 5.3)', async () => {
+    const onMatchupCompleted = vi.fn();
+    const hook = buildHook({ onMatchupCompleted });
+    await hook.mount();
+    const payload = {
+      competitionId: 'comp-1',
+      matchupId: 'm-1',
+      roundNumber: 1,
+      bracketPosition: 0,
+      winnerCompetitorId: 'c_a',
+      tally: { player1: 2, player2: 1, tie: 0, total: 3 },
+      advancedFromTie: false,
+      organizerDecisionReason: null,
+      completedAt: '2026-05-05T15:00:00.000Z',
+    };
+    await act(async () => {
+      fakeSocket._trigger('matchup.completed', payload);
+    });
+    expect(onMatchupCompleted).toHaveBeenCalledWith(payload);
+    hook.unmount();
+  });
+
+  it('forwards matchup.revote-required events to onMatchupRevoteRequired (Story 5.3)', async () => {
+    const onMatchupRevoteRequired = vi.fn();
+    const hook = buildHook({ onMatchupRevoteRequired });
+    await hook.mount();
+    const payload = {
+      competitionId: 'comp-1',
+      matchupId: 'm-1',
+      revoteCount: 1,
+      tally: { player1: 1, player2: 1, tie: 1, total: 3 },
+      detectedAt: '2026-05-05T15:00:00.000Z',
+    };
+    await act(async () => {
+      fakeSocket._trigger('matchup.revote-required', payload);
+    });
+    expect(onMatchupRevoteRequired).toHaveBeenCalledWith(payload);
+    hook.unmount();
+  });
+
+  it('forwards bracket.advanced events to onBracketAdvanced (Story 5.3)', async () => {
+    const onBracketAdvanced = vi.fn();
+    const hook = buildHook({ onBracketAdvanced });
+    await hook.mount();
+    const payload = {
+      competitionId: 'comp-1',
+      roundNumber: 2,
+      matchups: [],
+      advancedAt: '2026-05-05T15:00:00.000Z',
+    };
+    await act(async () => {
+      fakeSocket._trigger('bracket.advanced', payload);
+    });
+    expect(onBracketAdvanced).toHaveBeenCalledWith(payload);
+    hook.unmount();
+  });
+
+  it('forwards competition.completed events to onCompetitionCompleted (Story 5.3)', async () => {
+    const onCompetitionCompleted = vi.fn();
+    const hook = buildHook({ onCompetitionCompleted });
+    await hook.mount();
+    const payload = {
+      competitionId: 'comp-1',
+      championCompetitorId: 'champ',
+      completedAt: '2026-05-05T15:00:00.000Z',
+    };
+    await act(async () => {
+      fakeSocket._trigger('competition.completed', payload);
+    });
+    expect(onCompetitionCompleted).toHaveBeenCalledWith(payload);
+    hook.unmount();
   });
 });

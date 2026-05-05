@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { JudgeVoteInput } from '@competition-platform/format-cypher-battles';
 import { isNetworkError } from '@/lib/network-error';
@@ -13,16 +13,29 @@ interface BattlesVotingScreenProps {
    * single localStorage queue spans both phases.
    */
   enqueueVote: (s: QueuedVoteSubmission) => void;
+  revoteNoticeMatchupId?: string | null;
+  onRevoteNoticeDismiss?: () => void;
 }
 
 type Status = 'idle' | 'sending' | 'confirmed' | 'queued' | 'error';
 
-export function BattlesVotingScreen({ token, enqueueVote }: BattlesVotingScreenProps) {
+export function BattlesVotingScreen({
+  token,
+  enqueueVote,
+  revoteNoticeMatchupId,
+  onRevoteNoticeDismiss,
+}: BattlesVotingScreenProps) {
   const utils = trpc.useUtils();
   const submitVote = trpc.tournament.submitVote.useMutation();
   const [status, setStatus] = useState<Status>('idle');
   const submitLockRef = useRef(false);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!revoteNoticeMatchupId) return;
+    const id = setTimeout(() => onRevoteNoticeDismiss?.(), 4000);
+    return () => clearTimeout(id);
+  }, [revoteNoticeMatchupId, onRevoteNoticeDismiss]);
 
   const { data, isLoading } = trpc.tournament.getBattlesAssignment.useQuery(
     { token },
@@ -119,8 +132,21 @@ export function BattlesVotingScreen({ token, enqueueVote }: BattlesVotingScreenP
     );
   }
 
+  const showRevoteNotice =
+    revoteNoticeMatchupId !== null &&
+    revoteNoticeMatchupId !== undefined &&
+    revoteNoticeMatchupId === matchup.matchupId;
+
   return (
     <div className="flex flex-col gap-4">
+      {showRevoteNotice && (
+        <p
+          role="status"
+          className="rounded border border-yellow-500/40 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 dark:bg-yellow-950/20 dark:text-yellow-200"
+        >
+          Tied vote — re-voting on this matchup.
+        </p>
+      )}
       <p className="text-xs text-muted-foreground uppercase tracking-wide">
         Round {matchup.roundNumber} · Match {matchup.bracketPosition + 1}
       </p>
