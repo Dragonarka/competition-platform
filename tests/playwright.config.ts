@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:3000';
 const API_URL = process.env.API_URL ?? 'http://localhost:3001';
 const IS_CI = !!process.env.CI;
+const HAS_CLERK = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export default defineConfig({
   testDir: './e2e',
@@ -57,26 +58,27 @@ export default defineConfig({
       testMatch: /.*judge.*\.spec\.ts/,
     },
   ],
-  webServer: IS_CI
-    ? undefined
-    : [
-        {
-          command: 'pnpm --filter @competition-platform/api start:dev',
-          url: `${API_URL}/health`,
-          reuseExistingServer: true,
-          timeout: 120_000,
-          stdout: 'pipe',
-          stderr: 'pipe',
-        },
-        {
-          command: 'pnpm --filter @competition-platform/web dev',
-          url: BASE_URL,
-          reuseExistingServer: true,
-          timeout: 120_000,
-          stdout: 'pipe',
-          stderr: 'pipe',
-        },
-      ],
+  webServer:
+    IS_CI || !HAS_CLERK
+      ? undefined
+      : [
+          {
+            command: 'pnpm --filter @competition-platform/api start:dev',
+            url: `${API_URL}/health`,
+            reuseExistingServer: true,
+            timeout: 120_000,
+            stdout: 'pipe',
+            stderr: 'pipe',
+          },
+          {
+            command: 'pnpm --filter @competition-platform/web dev',
+            url: BASE_URL,
+            reuseExistingServer: true,
+            timeout: 120_000,
+            stdout: 'pipe',
+            stderr: 'pipe',
+          },
+        ],
   metadata: {
     project: 'competition-platform',
     stack: 'Next.js 16 + NestJS 11 + tRPC + Socket.IO',

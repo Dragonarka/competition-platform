@@ -7,3 +7,5 @@ export * from './formats';
 export * from './users';
 export * from './judge-sessions';
 export * from './competitor-group-assignments';
+export * from './battle-matchups';
+export * from './votes';

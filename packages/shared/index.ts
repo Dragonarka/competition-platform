@@ -19,3 +19,6 @@ export * from './types/judge-session.types';
 export * from './validation/judge-session.schema';
 export * from './constants/index';
 export * from './types/standings.types';
+export * from './types/judge-live-status';
+export * from './validation/competitor.schema';
+export * from './events/competitor-events';

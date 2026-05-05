@@ -13,11 +13,13 @@ interface JudgeGroupsManagerProps {
 
 interface CompData {
   id: string;
+  status: 'draft' | 'active' | 'completed' | 'archived';
   cypherJudgeCount: number | null;
   cypherGroupCount: number | null;
   advancementThreshold: number | null;
   battlesJudgeCount: number | null;
   tieBreakingRule: 're_vote' | 'organizer_decision' | null;
+  soloMode: boolean;
 }
 
 interface JudgeGroupsFormProps {
@@ -61,6 +63,19 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
     },
   });
 
+  const soloModeMutation = trpc.tournament.setSoloMode.useMutation({
+    onSuccess: () => {
+      void utils.tournament.getCompetition.invalidate({ competitionId });
+      setSaveError(null);
+    },
+    onError: (err) => {
+      setSaveError(err.message);
+    },
+  });
+
+  const isDraft = comp.status === 'draft';
+  const soloModeEnabled = comp.soloMode;
+
   const validJudges = typeof cypherJudgeCount === 'number' && cypherJudgeCount > 0;
   const validGroups = typeof cypherGroupCount === 'number' && cypherGroupCount > 0;
   const validConfig =
@@ -81,27 +96,67 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError(null);
+    // In solo mode, judge counts and group count are forced to 1 — the
+    // organizer is the sole judge covering one group of all competitors.
+    const effectiveCypherJudgeCount = soloModeEnabled ? 1 : cypherJudgeCount;
+    const effectiveCypherGroupCount = soloModeEnabled ? 1 : cypherGroupCount;
+    const effectiveBattlesJudgeCount = soloModeEnabled ? 1 : battlesJudgeCount;
     if (
-      typeof cypherJudgeCount !== 'number' ||
-      typeof cypherGroupCount !== 'number' ||
+      typeof effectiveCypherJudgeCount !== 'number' ||
+      typeof effectiveCypherGroupCount !== 'number' ||
       typeof advancementThreshold !== 'number' ||
-      typeof battlesJudgeCount !== 'number'
+      typeof effectiveBattlesJudgeCount !== 'number'
     ) {
       setSaveError('All fields are required');
       return;
     }
     mutation.mutate({
       competitionId,
-      cypherJudgeCount,
-      cypherGroupCount,
+      cypherJudgeCount: effectiveCypherJudgeCount,
+      cypherGroupCount: effectiveCypherGroupCount,
       advancementThreshold,
-      battlesJudgeCount,
+      battlesJudgeCount: effectiveBattlesJudgeCount,
       tieBreakingRule,
     });
   };
 
   return (
     <form onSubmit={handleSave} className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Solo Mode</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={soloModeEnabled}
+              disabled={!isDraft || soloModeMutation.isPending}
+              onChange={(e) => {
+                soloModeMutation.mutate({
+                  competitionId,
+                  soloMode: e.target.checked,
+                });
+              }}
+            />
+            <span className="text-sm">
+              I&apos;ll score directly as the organizer — no separate judges needed
+            </span>
+          </label>
+          {!isDraft && (
+            <p className="text-xs text-muted-foreground">
+              Solo mode can only be toggled before the competition starts.
+            </p>
+          )}
+          {soloModeEnabled && (
+            <p className="text-xs text-muted-foreground">
+              Judge counts are managed automatically in solo mode (1 organizer = 1 judge × 1 group).
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Cypher Phase</CardTitle>
@@ -117,7 +172,7 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
                 max={100}
                 value={cypherJudgeCount}
                 onChange={(e) => setCypherJudgeCount(parseIntField(e.target.value))}
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || soloModeEnabled}
               />
             </div>
             <div className="space-y-1.5">
@@ -129,7 +184,7 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
                 max={50}
                 value={cypherGroupCount}
                 onChange={(e) => setCypherGroupCount(parseIntField(e.target.value))}
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || soloModeEnabled}
               />
             </div>
           </div>
@@ -180,7 +235,7 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
               max={100}
               value={battlesJudgeCount}
               onChange={(e) => setBattlesJudgeCount(parseIntField(e.target.value))}
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || soloModeEnabled}
             />
             <p className="text-xs text-muted-foreground">
               Configured independently from Cypher judges (FR8).

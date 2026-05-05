@@ -5,6 +5,7 @@ import type { Socket } from 'socket.io-client';
 import type {
   ServerToClientEvents,
   ClientToServerEvents,
+  PhaseTransitionedPayload,
   StandingsEntry,
 } from '@competition-platform/shared';
 
@@ -14,14 +15,21 @@ type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
 interface UsePublicSocketOptions {
   competitionId: string;
   onStandingsUpdated?: (standings: StandingsEntry[]) => void;
+  onPhaseTransitioned?: (payload: PhaseTransitionedPayload) => void;
 }
 
-export function usePublicSocket({ competitionId, onStandingsUpdated }: UsePublicSocketOptions) {
+export function usePublicSocket({
+  competitionId,
+  onStandingsUpdated,
+  onPhaseTransitioned,
+}: UsePublicSocketOptions) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
-  const callbackRef = useRef(onStandingsUpdated);
-  // Keep ref current on every render without adding callback to socket effect deps.
+  const standingsCallbackRef = useRef(onStandingsUpdated);
+  const phaseCallbackRef = useRef(onPhaseTransitioned);
+  // Keep refs current on every render without adding callbacks to socket effect deps.
   useEffect(() => {
-    callbackRef.current = onStandingsUpdated;
+    standingsCallbackRef.current = onStandingsUpdated;
+    phaseCallbackRef.current = onPhaseTransitioned;
   });
 
   useEffect(() => {
@@ -40,7 +48,11 @@ export function usePublicSocket({ competitionId, onStandingsUpdated }: UsePublic
     socket.on('connect_error', () => setConnectionStatus('reconnecting'));
 
     socket.on('standings.updated', (standings) => {
-      callbackRef.current?.(standings);
+      standingsCallbackRef.current?.(standings);
+    });
+
+    socket.on('phase.transitioned', (payload) => {
+      phaseCallbackRef.current?.(payload);
     });
 
     return () => {

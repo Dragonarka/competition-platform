@@ -36,6 +36,9 @@ export default function StandingsPage() {
     onStandingsUpdated: (incoming) => {
       utils.tournament.getStandings.setData({ competitionId }, incoming);
     },
+    onPhaseTransitioned: () => {
+      void utils.tournament.getStandings.invalidate({ competitionId });
+    },
   });
 
   return (

@@ -21,3 +21,22 @@ export const startCypherPhaseSchema = z.object({
 });
 
 export type StartCypherPhaseInput = z.infer<typeof startCypherPhaseSchema>;
+
+export const completeCypherPhaseSchema = z.object({
+  competitionId: z.string().min(1, 'Competition ID is required'),
+});
+
+export type CompleteCypherPhaseInput = z.infer<typeof completeCypherPhaseSchema>;
+
+export const getDashboardSnapshotSchema = z.object({
+  competitionId: z.string().min(1, 'Competition ID is required'),
+});
+
+export type GetDashboardSnapshotInput = z.infer<typeof getDashboardSnapshotSchema>;
+
+export const setSoloModeSchema = z.object({
+  competitionId: z.string().min(1, 'Competition ID is required'),
+  soloMode: z.boolean(),
+});
+
+export type SetSoloModeInput = z.infer<typeof setSoloModeSchema>;

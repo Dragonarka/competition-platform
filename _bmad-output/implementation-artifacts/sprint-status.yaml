@@ -62,22 +62,22 @@ development_status:
   3-2-cypher-phase-start-and-judge-group-assignment: done
   3-3-judge-scoring-interface-cypher-mode: done
   3-4-real-time-score-aggregation-and-live-standings: done
-  3-5-offline-score-queue-and-connection-resilience: backlog
-  3-6-cypher-phase-completion-and-advancement-review: backlog
+  3-5-offline-score-queue-and-connection-resilience: done
+  3-6-cypher-phase-completion-and-advancement-review: done
   epic-3-retrospective: optional
 
   # ─── Epic 4: Organizer Mission Control & Admin Overrides ───
-  epic-4: backlog
-  4-1-live-organizer-dashboard-and-judge-monitoring: backlog
-  4-2-score-override-and-immutable-audit-trail: backlog
-  4-3-competitor-withdrawal-and-rescue: backlog
-  4-4-solo-scoring-mode-and-phase-transition-control: backlog
+  epic-4: done
+  4-1-live-organizer-dashboard-and-judge-monitoring: done
+  4-2-score-override-and-immutable-audit-trail: done
+  4-3-competitor-withdrawal-and-rescue: done
+  4-4-solo-scoring-mode-and-phase-transition-control: done
   epic-4-retrospective: optional
 
   # ─── Epic 5: Battles Phase & Competition Completion ───
-  epic-5: backlog
-  5-1-battles-bracket-generation: backlog
-  5-2-judge-voting-interface-battles-mode: backlog
+  epic-5: in-progress
+  5-1-battles-bracket-generation: done
+  5-2-judge-voting-interface-battles-mode: done
   5-3-bracket-progression-and-winner-determination: backlog
   epic-5-retrospective: optional
 

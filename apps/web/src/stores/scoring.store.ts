@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type SubmissionStatus = 'idle' | 'sending' | 'confirmed' | 'error';
+type SubmissionStatus = 'idle' | 'sending' | 'confirmed' | 'error' | 'queued';
 type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
 
 interface ScoringState {

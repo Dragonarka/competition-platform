@@ -1,30 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { useJudgeSocket } from '@/hooks/use-judge-socket';
+import { useOfflineQueue } from '@/hooks/use-offline-queue';
 import { useScoringStore } from '@/stores/scoring.store';
+import type { QueuedSubmission, QueuedVoteSubmission } from '@/lib/offline-queue';
+import { DRAFT_KEY, parseDraft } from '@/lib/judge-draft';
+import { isNetworkError } from '@/lib/network-error';
+import { BattlesVotingScreen } from '@/components/judge/battles-voting-screen';
 // TODO: load via FormatRenderer once format registry is implemented
 import { JudgeScoreInput } from '@competition-platform/format-cypher-battles';
-
-const DRAFT_KEY = (judgeSessionId: string, competitorId: string) =>
-  `judge-draft-${judgeSessionId}-${competitorId}`;
-
-function parseDraft(raw: string | null): Record<string, string> {
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v === 'string') out[k] = v;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
 
 const STATUS_COLORS = {
   connected: 'bg-green-500',
@@ -32,14 +19,25 @@ const STATUS_COLORS = {
   disconnected: 'bg-red-500',
 } as const;
 
+interface DrainNotice {
+  id: string;
+  variant: 'success' | 'error';
+  message: string;
+}
+
+const DRAIN_SUCCESS_MS = 2500;
+const DRAIN_ERROR_MS = 6000;
+
 export default function JudgePage() {
   const { token } = useParams<{ token: string }>();
   const { submissionStatus, connectionStatus, setSubmissionStatus, setConnectionStatus } =
     useScoringStore();
   const utils = trpc.useUtils();
   const [localScoredIds, setLocalScoredIds] = useState<string[]>([]);
+  const [drainNotices, setDrainNotices] = useState<DrainNotice[]>([]);
   const submitLockRef = useRef(false);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drainNoticeTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     return () => {
@@ -47,7 +45,18 @@ export default function JudgePage() {
         clearTimeout(advanceTimerRef.current);
         advanceTimerRef.current = null;
       }
+      drainNoticeTimersRef.current.forEach((t) => clearTimeout(t));
+      drainNoticeTimersRef.current.clear();
     };
+  }, []);
+
+  const pushDrainNotice = useCallback((notice: DrainNotice, durationMs: number) => {
+    setDrainNotices((prev) => [...prev, notice]);
+    const timer = setTimeout(() => {
+      setDrainNotices((prev) => prev.filter((n) => n.id !== notice.id));
+      drainNoticeTimersRef.current.delete(notice.id);
+    }, durationMs);
+    drainNoticeTimersRef.current.set(notice.id, timer);
   }, []);
 
   const {
@@ -62,14 +71,19 @@ export default function JudgePage() {
     },
   );
 
+  const inBattlesPhase =
+    tokenData?.competitionStatus === 'active' && tokenData.cypherCompletedAt !== null;
+  const inCypherPhase =
+    tokenData?.competitionStatus === 'active' && tokenData.cypherCompletedAt === null;
+
   const { data: assignments } = trpc.tournament.getJudgeAssignments.useQuery(
     { token },
-    { enabled: tokenData?.competitionStatus === 'active' },
+    { enabled: inCypherPhase },
   );
 
   const submitScoreMutation = trpc.tournament.submitScore.useMutation();
 
-  useJudgeSocket({
+  const socketRef = useJudgeSocket({
     token,
     judgeSessionId: tokenData?.judgeSessionId ?? '',
     competitionId: tokenData?.competitionId ?? '',
@@ -80,7 +94,75 @@ export default function JudgePage() {
     onScoreSubmitted: () => {
       void utils.tournament.getJudgeAssignments.invalidate({ token });
     },
+    onVoteSubmitted: () => {
+      // Per AC #10, vote.submitted broadcasts to every per-judge room.
+      // Refetch on receipt so a judge's screen reflects bracket changes once
+      // Story 5.3 lands matchup.completed.
+      void utils.tournament.getBattlesAssignment.invalidate({ token });
+    },
     onStatusChange: setConnectionStatus,
+  });
+
+  const submitVoteMutation = trpc.tournament.submitVote.useMutation();
+
+  const offlineQueue = useOfflineQueue({
+    judgeSessionId: tokenData?.judgeSessionId ?? '',
+    submitFn: async (s: QueuedSubmission) => {
+      if (s.kind === 'vote') {
+        return submitVoteMutation.mutateAsync({
+          token: s.token,
+          matchupId: s.matchupId,
+          vote: s.vote,
+          idempotencyKey: s.idempotencyKey,
+        });
+      }
+      return submitScoreMutation.mutateAsync({
+        token: s.token,
+        competitorId: s.competitorId,
+        scores: s.scores,
+        idempotencyKey: s.idempotencyKey,
+      });
+    },
+    onSuccess: (s) => {
+      void utils.tournament.getJudgeAssignments.invalidate({ token });
+      pushDrainNotice(
+        {
+          id: s.idempotencyKey,
+          variant: 'success',
+          message: s.kind === 'vote' ? 'Vote submitted ✓' : 'Score submitted ✓',
+        },
+        DRAIN_SUCCESS_MS,
+      );
+      if (s.kind === 'vote') {
+        void utils.tournament.getBattlesAssignment.invalidate({ token });
+      }
+    },
+    onPermanentFailure: (s, err) => {
+      console.error('[offline-queue] permanent failure dropped from queue', {
+        kind: s.kind,
+        idempotencyKey: s.idempotencyKey,
+        err,
+      });
+      pushDrainNotice(
+        {
+          id: s.idempotencyKey,
+          variant: 'error',
+          message:
+            s.kind === 'vote'
+              ? 'Vote failed — contact organizer'
+              : 'Score failed — contact organizer',
+        },
+        DRAIN_ERROR_MS,
+      );
+    },
+    onQueueSizeChanged: (size) => {
+      const socket = socketRef.current;
+      const judgeSessionId = tokenData?.judgeSessionId;
+      const competitionId = tokenData?.competitionId;
+      if (socket?.connected && judgeSessionId && competitionId) {
+        socket.emit('judge.status', { competitionId, sessionId: judgeSessionId, queueSize: size });
+      }
+    },
   });
 
   const ConnectionDot = (
@@ -89,6 +171,28 @@ export default function JudgePage() {
       <span className="text-xs text-muted-foreground">
         {connectionStatus === 'connected' ? 'Online' : connectionStatus}
       </span>
+      {offlineQueue.queueSize > 0 && (
+        <span className="text-xs text-yellow-600">{offlineQueue.queueSize} queued</span>
+      )}
+    </div>
+  );
+
+  const DrainNoticesStack = drainNotices.length > 0 && (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed top-12 right-3 flex flex-col gap-1 z-20 max-w-xs"
+    >
+      {drainNotices.map((n) => (
+        <div
+          key={n.id}
+          className={`text-xs px-3 py-2 rounded shadow ${
+            n.variant === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+          }`}
+        >
+          {n.message}
+        </div>
+      ))}
     </div>
   );
 
@@ -124,6 +228,7 @@ export default function JudgePage() {
     return (
       <main className="min-h-screen flex items-center justify-center p-4">
         {ConnectionDot}
+        {DrainNoticesStack}
         <div className="text-center space-y-4 max-w-sm">
           <h1 className="text-2xl font-bold">Welcome, {tokenData.label}</h1>
           <p className="text-muted-foreground">
@@ -137,10 +242,30 @@ export default function JudgePage() {
     );
   }
 
+  // Phase router: cypherCompletedAt is the source of truth for "we're in
+  // battles" because Story 5.1 sets it atomically with bracket generation.
+  if (inBattlesPhase) {
+    return (
+      <main className="min-h-screen flex flex-col p-4 max-w-lg mx-auto">
+        {ConnectionDot}
+        {DrainNoticesStack}
+        <div className="mb-6 pt-8">
+          <p className="text-sm text-muted-foreground">{tokenData.label}</p>
+          <p className="text-xs text-muted-foreground">Battles phase</p>
+        </div>
+        <BattlesVotingScreen
+          token={token}
+          enqueueVote={(s: QueuedVoteSubmission) => offlineQueue.enqueue(s)}
+        />
+      </main>
+    );
+  }
+
   if (!assignments) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         {ConnectionDot}
+        {DrainNoticesStack}
         <p className="text-muted-foreground">Loading assignments...</p>
       </main>
     );
@@ -153,6 +278,7 @@ export default function JudgePage() {
     return (
       <main className="min-h-screen flex items-center justify-center p-4">
         {ConnectionDot}
+        {DrainNoticesStack}
         <div className="text-center space-y-2">
           <p className="text-lg font-semibold">All done!</p>
           <p className="text-muted-foreground">Waiting for next round...</p>
@@ -175,17 +301,20 @@ export default function JudgePage() {
     if (submitLockRef.current) return;
     submitLockRef.current = true;
     const idempotencyKey = crypto.randomUUID();
+    const submission: QueuedSubmission = {
+      kind: 'score',
+      token,
+      competitorId: currentCompetitor.id,
+      scores: Object.entries(formattedScores).map(([criterionId, value]) => ({
+        criterionId,
+        value,
+      })),
+      idempotencyKey,
+      queuedAt: new Date().toISOString(),
+    };
     setSubmissionStatus('sending');
     try {
-      await submitScoreMutation.mutateAsync({
-        token,
-        competitorId: currentCompetitor.id,
-        scores: Object.entries(formattedScores).map(([criterionId, value]) => ({
-          criterionId,
-          value,
-        })),
-        idempotencyKey,
-      });
+      await submitScoreMutation.mutateAsync(submission);
       localStorage.removeItem(DRAFT_KEY(judgeSessionId, currentCompetitor.id));
       setSubmissionStatus('confirmed');
       if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
@@ -195,15 +324,29 @@ export default function JudgePage() {
         submitLockRef.current = false;
         advanceTimerRef.current = null;
       }, 800);
-    } catch {
-      setSubmissionStatus('error');
-      submitLockRef.current = false;
+    } catch (err) {
+      if (isNetworkError(err)) {
+        offlineQueue.enqueue(submission);
+        localStorage.removeItem(DRAFT_KEY(judgeSessionId, currentCompetitor.id));
+        setSubmissionStatus('queued');
+        if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = setTimeout(() => {
+          setLocalScoredIds((prev) => [...prev, currentCompetitor.id]);
+          setSubmissionStatus('idle');
+          submitLockRef.current = false;
+          advanceTimerRef.current = null;
+        }, 1500);
+      } else {
+        setSubmissionStatus('error');
+        submitLockRef.current = false;
+      }
     }
   }
 
   return (
     <main className="min-h-screen flex flex-col p-4 max-w-lg mx-auto">
       {ConnectionDot}
+      {DrainNoticesStack}
       <div className="mb-6 pt-8">
         <p className="text-sm text-muted-foreground">{tokenData.label}</p>
         <p className="text-xs text-muted-foreground">
@@ -214,6 +357,12 @@ export default function JudgePage() {
       {submissionStatus === 'confirmed' ? (
         <div className="flex items-center justify-center flex-1">
           <p className="text-lg font-semibold text-green-600">Score submitted!</p>
+        </div>
+      ) : submissionStatus === 'queued' ? (
+        <div className="flex items-center justify-center flex-1">
+          <p className="text-lg font-semibold text-yellow-600">
+            Queued — will submit when connection returns
+          </p>
         </div>
       ) : (
         <JudgeScoreInput

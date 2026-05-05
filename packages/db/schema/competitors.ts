@@ -1,6 +1,8 @@
-import { pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uniqueIndex, pgEnum } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
 import { competitions } from './competitions';
+
+export const competitorStatusEnum = pgEnum('competitor_status', ['active', 'withdrawn']);
 
 export const competitors = pgTable(
   'competitors',
@@ -13,6 +15,7 @@ export const competitors = pgTable(
       .references(() => competitions.id, { onDelete: 'cascade' }),
     participantId: text('participant_id').notNull(),
     name: text('name').notNull(),
+    status: competitorStatusEnum('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

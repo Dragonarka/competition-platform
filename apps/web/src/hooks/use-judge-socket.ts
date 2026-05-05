@@ -2,7 +2,11 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
-import type { ServerToClientEvents, ClientToServerEvents } from '@competition-platform/shared';
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+  VoteSubmittedPayload,
+} from '@competition-platform/shared';
 
 type JudgeSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -12,6 +16,7 @@ interface UseJudgeSocketOptions {
   competitionId: string;
   onCompetitionStarted?: () => void;
   onScoreSubmitted?: () => void;
+  onVoteSubmitted?: (payload: VoteSubmittedPayload) => void;
   onStatusChange?: (status: 'connected' | 'reconnecting' | 'disconnected') => void;
 }
 
@@ -56,9 +61,20 @@ export function useJudgeSocket(opts: UseJudgeSocketOptions) {
       optsRef.current.onScoreSubmitted?.();
     });
 
+    socket.on('vote.submitted', (p) => {
+      optsRef.current.onVoteSubmitted?.(p);
+    });
+
+    // When the browser goes offline, Socket.IO will try to reconnect and emit
+    // connect_error (→ 'reconnecting'). Force 'disconnected' so the indicator
+    // stays red for the duration of the offline period.
+    const handleOffline = () => optsRef.current.onStatusChange?.('disconnected');
+    window.addEventListener('offline', handleOffline);
+
     socketRef.current = socket;
     return () => {
       socket.disconnect();
+      window.removeEventListener('offline', handleOffline);
     };
   }, [opts.token, opts.competitionId, opts.judgeSessionId]);
 

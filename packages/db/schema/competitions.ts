@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, pgEnum, integer } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, pgEnum, integer, boolean } from 'drizzle-orm/pg-core';
 import { nanoid } from 'nanoid';
 
 export const competitionStatusEnum = pgEnum('competition_status', [
@@ -27,6 +27,8 @@ export const competitions = pgTable('competitions', {
   advancementThreshold: integer('advancement_threshold'),
   battlesJudgeCount: integer('battles_judge_count'),
   tieBreakingRule: tieBreakingRuleEnum('tie_breaking_rule'),
+  cypherCompletedAt: timestamp('cypher_completed_at', { withTimezone: true }),
+  soloMode: boolean('solo_mode').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

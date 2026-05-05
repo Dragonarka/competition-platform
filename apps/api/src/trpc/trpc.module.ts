@@ -1,4 +1,4 @@
-import { Module, type OnModuleInit } from '@nestjs/common';
+import { Inject, Module, type OnModuleInit } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { verifyToken } from '@clerk/backend';
@@ -48,8 +48,9 @@ async function createContext({
 })
 export class TrpcModule implements OnModuleInit {
   constructor(
-    private readonly httpAdapterHost: HttpAdapterHost,
-    private readonly databaseService: DatabaseService,
+    @Inject(HttpAdapterHost) private readonly httpAdapterHost: HttpAdapterHost,
+    @Inject(DatabaseService) private readonly databaseService: DatabaseService,
+    @Inject(CompetitionGateway)
     private readonly competitionGateway: CompetitionGateway,
   ) {}
 
