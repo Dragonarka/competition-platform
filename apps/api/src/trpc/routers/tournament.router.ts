@@ -66,7 +66,7 @@ import {
   aggregateCompetitorScores,
   aggregateCypherScore,
 } from '@competition-platform/format-cypher-battles/scoring';
-import type { ScorePayload } from '@competition-platform/format-sdk';
+import { sumScores, type ScorePayload } from '@competition-platform/format-sdk';
 import type { DatabaseService } from '../../modules/database/database.service';
 import type { ICompetitionGateway } from '../../modules/websocket/competition-gateway.interface';
 import { roundRobinAssign } from '../../modules/competition/domain/group-assigner';
@@ -578,7 +578,82 @@ function sanitizeCriteriaScores(
   return out;
 }
 
-function computeStandings(scoreRows: StandingsRow[]): StandingsEntry[] {
+// Optional enrichment maps for Story 6.1 public-standings view.
+interface StandingsEnrichment {
+  criteriaById: Map<string, { name: string }>;
+  judgeGroups: Map<string, { groupIndex: number | null; label: string }>;
+}
+
+async function fetchStandingsEnrichment(
+  db: DatabaseService,
+  competitionId: string,
+): Promise<StandingsEnrichment> {
+  const [criteriaRows, judgeRows] = await Promise.all([
+    db.db
+      .select({ id: evaluationCriteria.id, name: evaluationCriteria.name })
+      .from(evaluationCriteria)
+      .where(eq(evaluationCriteria.competitionId, competitionId)),
+    db.db
+      .select({
+        id: judgeSessions.id,
+        groupIndex: judgeSessions.groupIndex,
+        label: judgeSessions.label,
+      })
+      .from(judgeSessions)
+      .where(eq(judgeSessions.competitionId, competitionId)),
+  ]);
+  return {
+    criteriaById: new Map(criteriaRows.map((c) => [c.id, { name: c.name }])),
+    judgeGroups: new Map(
+      judgeRows.map((j) => [
+        j.id,
+        { groupIndex: j.groupIndex, label: j.label },
+      ]),
+    ),
+  };
+}
+
+async function broadcastEnrichedStandings(
+  db: DatabaseService,
+  gateway: ICompetitionGateway,
+  competitionId: string,
+  source: string,
+) {
+  try {
+    const [updatedRows, enrichment] = await Promise.all([
+      db.db
+        .select({
+          competitorId: scores.competitorId,
+          judgeSessionId: scores.judgeSessionId,
+          criteriaScores: scores.criteriaScores,
+          competitorName: competitors.name,
+          participantId: competitors.participantId,
+        })
+        .from(scores)
+        .innerJoin(competitors, eq(scores.competitorId, competitors.id))
+        .where(
+          and(
+            eq(scores.competitionId, competitionId),
+            eq(competitors.status, 'active'),
+          ),
+        ),
+      fetchStandingsEnrichment(db, competitionId),
+    ]);
+    gateway.broadcastStandingsUpdated(
+      competitionId,
+      computeStandings(updatedRows, enrichment),
+    );
+  } catch (err) {
+    console.warn(
+      `[${source}] standings broadcast failed for ${competitionId}: ${String(err)}`,
+    );
+  }
+}
+
+function computeStandings(
+  scoreRows: StandingsRow[],
+  enrichment?: StandingsEnrichment,
+): StandingsEntry[] {
   const byCompetitor = new Map<
     string,
     { name: string; participantId: string; payloads: ScorePayload[] }
@@ -609,14 +684,69 @@ function computeStandings(scoreRows: StandingsRow[]): StandingsEntry[] {
     { name, participantId, payloads },
   ] of byCompetitor) {
     const result = aggregateCompetitorScores(payloads);
-    unsorted.push({
+    const entry: Omit<StandingsEntry, 'rank'> = {
       competitorId,
       competitorName: name,
       participantId,
       totalScore: result.totalScore,
       scoresByJudge: result.scoresByJudge,
       judgeCount: payloads.length,
-    });
+    };
+
+    if (enrichment) {
+      // Resolve criterion names; drop entries whose criterionId is no longer
+      // in the current evaluation_criteria table (defensive against renames).
+      const criteriaBreakdown = (result.criteriaBreakdown ?? [])
+        .map((b) => {
+          const def = enrichment.criteriaById.get(b.criterionId);
+          if (!def) return null;
+          return {
+            criterionId: b.criterionId,
+            criterionName: def.name,
+            total: b.total,
+            judgeCount: b.judgeCount,
+          };
+        })
+        .filter((b): b is NonNullable<typeof b> => b !== null);
+
+      // Group breakdown: sum the per-judge totals from scoresByJudge by the
+      // judge's groupIndex. Null groupIndex falls into a synthetic "Ungrouped"
+      // bucket — happens for organizer-judge sessions in solo mode.
+      const groupSums = new Map<
+        number | null,
+        { total: string[]; label: string; judgeCount: number }
+      >();
+      for (const [judgeSessionId, judgeTotal] of Object.entries(
+        result.scoresByJudge,
+      )) {
+        const meta = enrichment.judgeGroups.get(judgeSessionId);
+        const groupIndex = meta?.groupIndex ?? null;
+        const label =
+          meta?.groupIndex !== null && meta?.groupIndex !== undefined
+            ? `Group ${String.fromCharCode(65 + meta.groupIndex)}`
+            : 'Ungrouped';
+        let bucket = groupSums.get(groupIndex);
+        if (bucket === undefined) {
+          bucket = { total: [], label, judgeCount: 0 };
+          groupSums.set(groupIndex, bucket);
+        }
+        bucket.total.push(judgeTotal);
+        bucket.judgeCount += 1;
+      }
+      const groupBreakdown = Array.from(groupSums.entries())
+        .map(([groupIndex, b]) => ({
+          groupIndex: groupIndex ?? -1,
+          groupLabel: b.label,
+          total: sumScores(b.total),
+          judgeCount: b.judgeCount,
+        }))
+        .sort((a, b) => a.groupIndex - b.groupIndex);
+
+      entry.criteriaBreakdown = criteriaBreakdown;
+      entry.groupBreakdown = groupBreakdown;
+    }
+
+    unsorted.push(entry);
   }
 
   unsorted.sort((a, b) => parseFloat(b.totalScore) - parseFloat(a.totalScore));
@@ -1907,23 +2037,250 @@ export function createTournamentRouter(
           `getStandings:${ctx.clientIp ?? 'unknown'}`,
           PUBLIC_RL,
         );
-        const scoreRows = await db.db
-          .select({
-            competitorId: scores.competitorId,
-            judgeSessionId: scores.judgeSessionId,
-            criteriaScores: scores.criteriaScores,
-            competitorName: competitors.name,
-            participantId: competitors.participantId,
-          })
-          .from(scores)
-          .innerJoin(competitors, eq(scores.competitorId, competitors.id))
-          .where(
-            and(
-              eq(scores.competitionId, input.competitionId),
-              eq(competitors.status, 'active'),
+        const [scoreRows, enrichment] = await Promise.all([
+          db.db
+            .select({
+              competitorId: scores.competitorId,
+              judgeSessionId: scores.judgeSessionId,
+              criteriaScores: scores.criteriaScores,
+              competitorName: competitors.name,
+              participantId: competitors.participantId,
+            })
+            .from(scores)
+            .innerJoin(competitors, eq(scores.competitorId, competitors.id))
+            .where(
+              and(
+                eq(scores.competitionId, input.competitionId),
+                eq(competitors.status, 'active'),
+              ),
             ),
+          fetchStandingsEnrichment(db, input.competitionId),
+        ]);
+        return computeStandings(scoreRows, enrichment);
+      }),
+
+    // Story 6.1: public-facing "next matchup" lookups for the standings page.
+    // Separated from getBracket (admin-only, full structure) and from
+    // getStandings (high-frequency hot path) so a matchup completion only
+    // invalidates the small per-row hint, not the standings cache.
+    getPublicNextMatchups: t.procedure
+      .input(z.object({ competitionId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        enforceRateLimit(
+          `getPublicNextMatchups:${ctx.clientIp ?? 'unknown'}`,
+          PUBLIC_RL,
+        );
+
+        const [comp] = await db.db
+          .select({
+            id: competitions.id,
+            cypherCompletedAt: competitions.cypherCompletedAt,
+          })
+          .from(competitions)
+          .where(eq(competitions.id, input.competitionId));
+        if (!comp) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Competition not found',
+          });
+        }
+        // Battles not active yet → no next-matchup hints to render.
+        if (comp.cypherCompletedAt === null) return [];
+
+        // All non-bye matchups for this competition.
+        const matchupRows = await db.db
+          .select({
+            id: battleMatchups.id,
+            roundNumber: battleMatchups.roundNumber,
+            bracketPosition: battleMatchups.bracketPosition,
+            competitorAId: battleMatchups.competitorAId,
+            competitorBId: battleMatchups.competitorBId,
+            isBye: battleMatchups.isBye,
+            winnerCompetitorId: battleMatchups.winnerCompetitorId,
+          })
+          .from(battleMatchups)
+          .where(eq(battleMatchups.competitionId, input.competitionId))
+          .orderBy(asc(battleMatchups.roundNumber));
+
+        // Find the lowest round with at least one unresolved non-bye matchup.
+        let currentRound: number | null = null;
+        for (const m of matchupRows) {
+          if (m.isBye) continue;
+          if (m.winnerCompetitorId !== null) continue;
+          if (currentRound === null || m.roundNumber < currentRound) {
+            currentRound = m.roundNumber;
+          }
+        }
+        if (currentRound === null) return [];
+
+        const pending = matchupRows.filter(
+          (m) =>
+            m.roundNumber === currentRound &&
+            !m.isBye &&
+            m.winnerCompetitorId === null,
+        );
+        if (pending.length === 0) return [];
+
+        // Resolve competitor names in one round-trip.
+        const ids = new Set<string>();
+        for (const m of pending) {
+          if (m.competitorAId) ids.add(m.competitorAId);
+          if (m.competitorBId) ids.add(m.competitorBId);
+        }
+        const names = new Map<string, string>();
+        if (ids.size > 0) {
+          const rows = await db.db
+            .select({ id: competitors.id, name: competitors.name })
+            .from(competitors)
+            .where(inArray(competitors.id, [...ids]));
+          for (const r of rows) names.set(r.id, r.name);
+        }
+
+        // One entry per competitor, with opponent fields cross-pointing.
+        const entries: Array<{
+          competitorId: string;
+          matchupId: string;
+          roundNumber: number;
+          bracketPosition: number;
+          opponentCompetitorId: string | null;
+          opponentName: string | null;
+        }> = [];
+        for (const m of pending) {
+          if (m.competitorAId) {
+            entries.push({
+              competitorId: m.competitorAId,
+              matchupId: m.id,
+              roundNumber: m.roundNumber,
+              bracketPosition: m.bracketPosition,
+              opponentCompetitorId: m.competitorBId,
+              opponentName: m.competitorBId
+                ? (names.get(m.competitorBId) ?? null)
+                : null,
+            });
+          }
+          if (m.competitorBId) {
+            entries.push({
+              competitorId: m.competitorBId,
+              matchupId: m.id,
+              roundNumber: m.roundNumber,
+              bracketPosition: m.bracketPosition,
+              opponentCompetitorId: m.competitorAId,
+              opponentName: m.competitorAId
+                ? (names.get(m.competitorAId) ?? null)
+                : null,
+            });
+          }
+        }
+        return entries;
+      }),
+
+    getPublicBracket: t.procedure
+      .input(z.object({ competitionId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        enforceRateLimit(
+          `getPublicBracket:${ctx.clientIp ?? 'unknown'}`,
+          PUBLIC_RL,
+        );
+
+        const [comp] = await db.db
+          .select({
+            id: competitions.id,
+            cypherCompletedAt: competitions.cypherCompletedAt,
+            status: competitions.status,
+          })
+          .from(competitions)
+          .where(eq(competitions.id, input.competitionId));
+        if (!comp) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Competition not found',
+          });
+        }
+        if (comp.cypherCompletedAt === null) {
+          return {
+            matchups: [],
+            championCompetitorId: null,
+            currentRoundNumber: null,
+          };
+        }
+
+        const rows = await db.db
+          .select({
+            id: battleMatchups.id,
+            roundNumber: battleMatchups.roundNumber,
+            bracketPosition: battleMatchups.bracketPosition,
+            competitorAId: battleMatchups.competitorAId,
+            competitorBId: battleMatchups.competitorBId,
+            seedA: battleMatchups.seedA,
+            seedB: battleMatchups.seedB,
+            isBye: battleMatchups.isBye,
+            winnerCompetitorId: battleMatchups.winnerCompetitorId,
+          })
+          .from(battleMatchups)
+          .where(eq(battleMatchups.competitionId, input.competitionId))
+          .orderBy(
+            asc(battleMatchups.roundNumber),
+            asc(battleMatchups.bracketPosition),
           );
-        return computeStandings(scoreRows);
+
+        const ids = new Set<string>();
+        for (const r of rows) {
+          if (r.competitorAId) ids.add(r.competitorAId);
+          if (r.competitorBId) ids.add(r.competitorBId);
+        }
+
+        const names: Record<string, { name: string; participantId: string }> =
+          {};
+        if (ids.size > 0) {
+          const compRows = await db.db
+            .select({
+              id: competitors.id,
+              name: competitors.name,
+              participantId: competitors.participantId,
+            })
+            .from(competitors)
+            .where(inArray(competitors.id, [...ids]));
+          for (const c of compRows) {
+            names[c.id] = { name: c.name, participantId: c.participantId };
+          }
+        }
+
+        let championCompetitorId: string | null = null;
+        if (comp.status === 'completed') {
+          let maxRound = -1;
+          for (const r of rows) {
+            if (r.winnerCompetitorId !== null && r.roundNumber > maxRound) {
+              maxRound = r.roundNumber;
+              championCompetitorId = r.winnerCompetitorId;
+            }
+          }
+        }
+
+        let currentRoundNumber: number | null = null;
+        for (const r of rows) {
+          if (r.winnerCompetitorId === null && !r.isBye) {
+            if (
+              currentRoundNumber === null ||
+              r.roundNumber < currentRoundNumber
+            ) {
+              currentRoundNumber = r.roundNumber;
+            }
+          }
+        }
+
+        return {
+          matchups: rows.map((r) => ({
+            ...r,
+            competitorA: r.competitorAId
+              ? (names[r.competitorAId] ?? null)
+              : null,
+            competitorB: r.competitorBId
+              ? (names[r.competitorBId] ?? null)
+              : null,
+          })),
+          championCompetitorId,
+          currentRoundNumber,
+        };
       }),
 
     getJudgeAssignments: t.procedure
@@ -2339,44 +2696,12 @@ export function createTournamentRouter(
             competitionId,
             broadcastPayload as ScoreSubmittedPayload,
           );
-          // Recompute and broadcast aggregated standings to the public room.
-          // Failure is non-critical — the mutation already committed and the
-          // judge already received their success response.
-          // MVP trade-off: re-reads and re-aggregates ALL scores for the
-          // competition on every submission. For ~200 participants × 5 judges
-          // (1000 rows max) this is fine; at larger scale this should be
-          // replaced with an incremental update against an in-memory or Redis
-          // standings cache that mutates only the affected competitor's entry.
-          try {
-            const updatedRows = await db.db
-              .select({
-                competitorId: scores.competitorId,
-                judgeSessionId: scores.judgeSessionId,
-                criteriaScores: scores.criteriaScores,
-                competitorName: competitors.name,
-                participantId: competitors.participantId,
-              })
-              .from(scores)
-              .innerJoin(competitors, eq(scores.competitorId, competitors.id))
-              .where(
-                and(
-                  eq(scores.competitionId, competitionId),
-                  eq(competitors.status, 'active'),
-                ),
-              );
-            gateway.broadcastStandingsUpdated(
-              competitionId,
-              computeStandings(updatedRows),
-            );
-          } catch (err) {
-            // Log but do not fail: client-side TanStack Query invalidation on
-            // the next `score.submitted` event or on reconnect will refresh the
-            // view. A silent no-log swallow would hide computeStandings bugs.
-
-            console.warn(
-              `[submitScore] standings broadcast failed for ${competitionId}: ${String(err)}`,
-            );
-          }
+          await broadcastEnrichedStandings(
+            db,
+            gateway,
+            competitionId,
+            'submitScore',
+          );
         }
         return result;
       }),
@@ -2780,32 +3105,12 @@ export function createTournamentRouter(
           const finalPayload: ScoreSubmittedPayload = broadcastPayload;
           const competitionId = finalPayload.competitionId;
           gateway.broadcastScoreSubmitted(competitionId, finalPayload);
-          try {
-            const updatedRows = await db.db
-              .select({
-                competitorId: scores.competitorId,
-                judgeSessionId: scores.judgeSessionId,
-                criteriaScores: scores.criteriaScores,
-                competitorName: competitors.name,
-                participantId: competitors.participantId,
-              })
-              .from(scores)
-              .innerJoin(competitors, eq(scores.competitorId, competitors.id))
-              .where(
-                and(
-                  eq(scores.competitionId, competitionId),
-                  eq(competitors.status, 'active'),
-                ),
-              );
-            gateway.broadcastStandingsUpdated(
-              competitionId,
-              computeStandings(updatedRows),
-            );
-          } catch (err) {
-            console.warn(
-              `[submitOrganizerScore] standings broadcast failed for ${competitionId}: ${String(err)}`,
-            );
-          }
+          await broadcastEnrichedStandings(
+            db,
+            gateway,
+            competitionId,
+            'submitOrganizerScore',
+          );
         }
 
         return result;
@@ -3511,33 +3816,12 @@ export function createTournamentRouter(
         const finalPayload: ScoreOverriddenPayload | null = broadcastPayload;
         if (finalPayload !== null && competitionId !== null) {
           gateway.broadcastScoreOverridden(competitionId, finalPayload);
-          try {
-            const updatedRows = await db.db
-              .select({
-                competitorId: scores.competitorId,
-                judgeSessionId: scores.judgeSessionId,
-                criteriaScores: scores.criteriaScores,
-                competitorName: competitors.name,
-                participantId: competitors.participantId,
-              })
-              .from(scores)
-              .innerJoin(competitors, eq(scores.competitorId, competitors.id))
-              .where(
-                and(
-                  eq(scores.competitionId, competitionId),
-                  eq(competitors.status, 'active'),
-                ),
-              );
-            gateway.broadcastStandingsUpdated(
-              competitionId,
-              computeStandings(updatedRows),
-            );
-          } catch (err) {
-            const cidForLog: string = competitionId;
-            console.warn(
-              `[overrideScore] standings broadcast failed for ${cidForLog}: ${String(err)}`,
-            );
-          }
+          await broadcastEnrichedStandings(
+            db,
+            gateway,
+            competitionId,
+            'overrideScore',
+          );
         }
         return result;
       }),
@@ -3949,32 +4233,12 @@ export function createTournamentRouter(
           const competitionId: string = competitionIdForBroadcast;
           const payload: CompetitorWithdrawnPayload = broadcastPayload;
           gateway.broadcastCompetitorWithdrawn(competitionId, payload);
-          try {
-            const updatedRows = await db.db
-              .select({
-                competitorId: scores.competitorId,
-                judgeSessionId: scores.judgeSessionId,
-                criteriaScores: scores.criteriaScores,
-                competitorName: competitors.name,
-                participantId: competitors.participantId,
-              })
-              .from(scores)
-              .innerJoin(competitors, eq(scores.competitorId, competitors.id))
-              .where(
-                and(
-                  eq(scores.competitionId, competitionId),
-                  eq(competitors.status, 'active'),
-                ),
-              );
-            gateway.broadcastStandingsUpdated(
-              competitionId,
-              computeStandings(updatedRows),
-            );
-          } catch (err) {
-            console.warn(
-              `[withdrawCompetitor] standings broadcast failed for ${competitionId}: ${String(err)}`,
-            );
-          }
+          await broadcastEnrichedStandings(
+            db,
+            gateway,
+            competitionId,
+            'withdrawCompetitor',
+          );
         }
 
         return { success: true as const, competitorId: input.competitorId };
@@ -4100,32 +4364,12 @@ export function createTournamentRouter(
           const competitionId: string = competitionIdForBroadcast;
           const payload: CompetitorRescuedPayload = broadcastPayload;
           gateway.broadcastCompetitorRescued(competitionId, payload);
-          try {
-            const updatedRows = await db.db
-              .select({
-                competitorId: scores.competitorId,
-                judgeSessionId: scores.judgeSessionId,
-                criteriaScores: scores.criteriaScores,
-                competitorName: competitors.name,
-                participantId: competitors.participantId,
-              })
-              .from(scores)
-              .innerJoin(competitors, eq(scores.competitorId, competitors.id))
-              .where(
-                and(
-                  eq(scores.competitionId, competitionId),
-                  eq(competitors.status, 'active'),
-                ),
-              );
-            gateway.broadcastStandingsUpdated(
-              competitionId,
-              computeStandings(updatedRows),
-            );
-          } catch (err) {
-            console.warn(
-              `[rescueCompetitor] standings broadcast failed for ${competitionId}: ${String(err)}`,
-            );
-          }
+          await broadcastEnrichedStandings(
+            db,
+            gateway,
+            competitionId,
+            'rescueCompetitor',
+          );
         }
 
         return { success: true as const, competitorId: input.competitorId };

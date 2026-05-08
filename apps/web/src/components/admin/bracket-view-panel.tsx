@@ -1,6 +1,7 @@
 'use client';
 
 import { trpc } from '@/lib/trpc';
+import { roundLabel } from '@/lib/bracket-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface BracketViewPanelProps {
@@ -24,19 +25,6 @@ interface BracketMatchup {
   winnerCompetitorId: string | null;
   competitorA: CompetitorSlot | null;
   competitorB: CompetitorSlot | null;
-}
-
-function roundLabel(roundNumber: number, totalRounds: number): string {
-  if (totalRounds <= 0) return `Round ${roundNumber}`;
-  const fromFinal = totalRounds - roundNumber;
-  if (fromFinal === 0) return 'Final';
-  if (fromFinal === 1) return 'Semifinals';
-  if (fromFinal === 2) return 'Quarterfinals';
-  // Bracket size at this round = 2^(fromFinal+1). Use "Round of N" labelling
-  // (NCAA convention) so a 32-bracket reads "Round of 32 → Round of 16 → QF…"
-  // instead of generic "Round 1 → Round 2 → QF…".
-  const matchupsAtRound = 2 ** (fromFinal + 1);
-  return `Round of ${matchupsAtRound}`;
 }
 
 function MatchupSlot({

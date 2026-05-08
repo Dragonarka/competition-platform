@@ -82,10 +82,10 @@ development_status:
   epic-5-retrospective: done
 
   # ─── Epic 6: Public Standings, Bracket View & Presenter Mode ───
-  epic-6: backlog
-  6-1-public-standings-with-score-breakdowns: backlog
-  6-2-full-battles-bracket-view-on-public-url: backlog
-  6-3-presenter-mc-teleprompter-view: backlog
+  epic-6: done
+  6-1-public-standings-with-score-breakdowns: done
+  6-2-full-battles-bracket-view-on-public-url: done
+  6-3-presenter-mc-teleprompter-view: done
   epic-6-retrospective: optional
 
   # ─── Epic 7: Simulation Mode & Judge Training ───

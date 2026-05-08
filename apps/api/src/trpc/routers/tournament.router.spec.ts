@@ -1190,13 +1190,30 @@ describe('tournament.getJudgeAssignments (extended)', () => {
 // ---------------------------------------------------------------------------
 
 // getStandings uses a direct db.db.select().from().innerJoin().where() chain
-// (no transaction). This helper mocks the non-transactional Drizzle chain.
-function makeStandingsDb(scoreRows: unknown[]) {
+// (no transaction). Story 6.1 added 2 parallel queries (criteria + judges)
+// alongside the scores query — the helper cycles results per .where() call:
+//   1st call → scoreRows (joined with competitors)
+//   2nd call → criteriaRows (evaluation_criteria)
+//   3rd call → judgeRows (judge_sessions)
+// Existing tests pass only scoreRows; criteriaRows and judgeRows default to [],
+// which yields empty criteriaBreakdown and a single "Ungrouped" groupBreakdown
+// entry per judge — invisible to existing assertions.
+function makeStandingsDb(
+  scoreRows: unknown[],
+  options: { criteriaRows?: unknown[]; judgeRows?: unknown[] } = {},
+) {
+  const { criteriaRows = [], judgeRows = [] } = options;
+  const queue = [scoreRows, criteriaRows, judgeRows];
+  let idx = 0;
   const dbMock = {
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
     innerJoin: vi.fn().mockReturnThis(),
-    where: vi.fn().mockImplementation(() => createLazyResult(scoreRows)),
+    where: vi.fn().mockImplementation(() => {
+      const result = queue[idx] ?? [];
+      idx += 1;
+      return createLazyResult(result);
+    }),
   };
   return { db: dbMock } as any;
 }
@@ -1399,7 +1416,10 @@ describe('tournament.getStandings', () => {
     const c = makeCallerFor(db, makeFullGateway());
     await c.tournament.getStandings({ competitionId: 'comp_1' });
 
-    expect(captured).toHaveLength(1);
+    // Story 6.1: getStandings now also fires criteria + judges queries in
+    // parallel. The first capture is the scores WHERE — that's the one we
+    // assert on for the AC #8 contract.
+    expect(captured.length).toBeGreaterThanOrEqual(1);
     const whereArg = captured[0] as { queryChunks?: unknown[] };
     // `and(eq(...), eq(...))` produces an SQL whose queryChunks include both
     // sub-expressions. A single `eq(scores.competitionId, ...)` would not
@@ -1425,6 +1445,661 @@ describe('tournament.getStandings', () => {
     walk(chunks);
     expect(columnNames).toContain('status');
     expect(columnNames).toContain('competition_id');
+  });
+
+  // ─── Story 6.1: getStandings enrichment ──────────────────────────────────
+
+  it('Story 6.1: criteriaBreakdown populated with criterion names from evaluation_criteria', async () => {
+    const db = makeStandingsDb(
+      [
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_1',
+          criteriaScores: [
+            { criterionId: 'crit_foundations', value: '8.50' },
+            { criterionId: 'crit_musicality', value: '7.75' },
+            { criterionId: 'crit_style', value: '9.00' },
+          ],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+      ],
+      {
+        criteriaRows: [
+          { id: 'crit_foundations', name: 'Foundations' },
+          { id: 'crit_musicality', name: 'Musicality' },
+          { id: 'crit_style', name: 'Style' },
+        ],
+        judgeRows: [{ id: 'js_1', groupIndex: 0, label: 'Judge 1' }],
+      },
+    );
+    const c = makeCallerFor(db, makeFullGateway());
+    const result = await c.tournament.getStandings({ competitionId: 'comp_1' });
+    expect(result[0]?.criteriaBreakdown).toEqual([
+      {
+        criterionId: 'crit_foundations',
+        criterionName: 'Foundations',
+        total: '8.50',
+        judgeCount: 1,
+      },
+      {
+        criterionId: 'crit_musicality',
+        criterionName: 'Musicality',
+        total: '7.75',
+        judgeCount: 1,
+      },
+      {
+        criterionId: 'crit_style',
+        criterionName: 'Style',
+        total: '9.00',
+        judgeCount: 1,
+      },
+    ]);
+  });
+
+  it('Story 6.1: groupBreakdown sums per-judge totals by groupIndex', async () => {
+    // 4 judges across 2 groups (A=0, B=1).
+    // Group A: judge 1 (8) + judge 2 (7) = 15
+    // Group B: judge 3 (9) + judge 4 (6) = 15
+    const db = makeStandingsDb(
+      [
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_1',
+          criteriaScores: [{ criterionId: 'c1', value: '8.00' }],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_2',
+          criteriaScores: [{ criterionId: 'c1', value: '7.00' }],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_3',
+          criteriaScores: [{ criterionId: 'c1', value: '9.00' }],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_4',
+          criteriaScores: [{ criterionId: 'c1', value: '6.00' }],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+      ],
+      {
+        criteriaRows: [{ id: 'c1', name: 'C1' }],
+        judgeRows: [
+          { id: 'js_1', groupIndex: 0, label: 'J1' },
+          { id: 'js_2', groupIndex: 0, label: 'J2' },
+          { id: 'js_3', groupIndex: 1, label: 'J3' },
+          { id: 'js_4', groupIndex: 1, label: 'J4' },
+        ],
+      },
+    );
+    const c = makeCallerFor(db, makeFullGateway());
+    const result = await c.tournament.getStandings({ competitionId: 'comp_1' });
+    expect(result[0]?.groupBreakdown).toEqual([
+      { groupIndex: 0, groupLabel: 'Group A', total: '15.00', judgeCount: 2 },
+      { groupIndex: 1, groupLabel: 'Group B', total: '15.00', judgeCount: 2 },
+    ]);
+  });
+
+  it('Story 6.1: drops criteria entries whose criterionId no longer exists (renamed/deleted)', async () => {
+    const db = makeStandingsDb(
+      [
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_1',
+          criteriaScores: [
+            { criterionId: 'crit_alive', value: '8.00' },
+            { criterionId: 'crit_orphan', value: '5.00' },
+          ],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+      ],
+      {
+        // Only crit_alive is in the current criteria table.
+        criteriaRows: [{ id: 'crit_alive', name: 'Alive' }],
+        judgeRows: [{ id: 'js_1', groupIndex: 0, label: 'J1' }],
+      },
+    );
+    const c = makeCallerFor(db, makeFullGateway());
+    const result = await c.tournament.getStandings({ competitionId: 'comp_1' });
+    expect(result[0]?.criteriaBreakdown).toEqual([
+      {
+        criterionId: 'crit_alive',
+        criterionName: 'Alive',
+        total: '8.00',
+        judgeCount: 1,
+      },
+    ]);
+    // Total still includes both raw scores (the breakdown drop is display-only).
+    expect(result[0]?.totalScore).toBe('13.00');
+  });
+
+  it('Story 6.1: scoresByJudge regression — still populated for organizer-side dashboard consumers', async () => {
+    const db = makeStandingsDb(
+      [
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_1',
+          criteriaScores: [{ criterionId: 'c1', value: '8.00' }],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+        {
+          competitorId: 'comp_A',
+          judgeSessionId: 'js_2',
+          criteriaScores: [{ criterionId: 'c1', value: '7.00' }],
+          competitorName: 'Alpha',
+          participantId: 'P-001',
+        },
+      ],
+      {
+        criteriaRows: [{ id: 'c1', name: 'C1' }],
+        judgeRows: [
+          { id: 'js_1', groupIndex: 0, label: 'J1' },
+          { id: 'js_2', groupIndex: 0, label: 'J2' },
+        ],
+      },
+    );
+    const c = makeCallerFor(db, makeFullGateway());
+    const result = await c.tournament.getStandings({ competitionId: 'comp_1' });
+    expect(result[0]?.scoresByJudge).toEqual({ js_1: '8.00', js_2: '7.00' });
+  });
+});
+
+// ─── Story 6.1: tournament.getPublicNextMatchups ────────────────────────────
+
+describe('tournament.getPublicNextMatchups', () => {
+  // Sequential select-where chain: 1st → competition row, 2nd → matchup rows,
+  // 3rd → competitor name rows. Cycles through results per .where() call.
+  function makeNextMatchupsDb(
+    competitionRow: unknown[] | null,
+    matchupRows: unknown[],
+    competitorNameRows: unknown[] = [],
+  ) {
+    const queue: unknown[][] = [
+      competitionRow ?? [],
+      matchupRows,
+      competitorNameRows,
+    ];
+    let idx = 0;
+    const dbMock = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi
+        .fn()
+        .mockImplementation(() => createLazyResult(queue[idx++] ?? [])),
+    };
+    // Some calls don't use orderBy (competition row, competitor names) — they
+    // resolve via the .where() thenable directly.
+    dbMock.where = vi.fn().mockImplementation(() => {
+      // If next call is the matchup rows (which uses orderBy), return a chainable
+      // that defers execution to orderBy. Otherwise resolve immediately here.
+      const nextResult = queue[idx];
+      // Heuristic: matchup rows always include `roundNumber`; the others don't.
+      const looksLikeMatchups =
+        Array.isArray(nextResult) &&
+        nextResult.length > 0 &&
+        typeof (nextResult[0] as { roundNumber?: unknown })?.roundNumber ===
+          'number';
+      if (looksLikeMatchups) {
+        // Caller will call .orderBy(...) next — return a chainable that
+        // resolves on orderBy.
+        return {
+          orderBy: vi.fn().mockImplementation(() => {
+            const r = queue[idx++] ?? [];
+            return createLazyResult(r);
+          }),
+        };
+      }
+      const r = queue[idx++] ?? [];
+      return createLazyResult(r);
+    });
+    return { db: dbMock } as any;
+  }
+
+  it('rejects empty competitionId (Zod)', async () => {
+    await expect(
+      caller(null).tournament.getPublicNextMatchups({ competitionId: '' }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('throws NOT_FOUND when competition does not exist', async () => {
+    const db = makeNextMatchupsDb(null, []);
+    const err = await makeCallerFor(db, makeFullGateway())
+      .tournament.getPublicNextMatchups({ competitionId: 'comp_404' })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('returns [] when cypherCompletedAt is null (battles not active)', async () => {
+    const db = makeNextMatchupsDb(
+      [{ id: 'comp_1', cypherCompletedAt: null }],
+      [],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicNextMatchups({ competitionId: 'comp_1' });
+    expect(result).toEqual([]);
+  });
+
+  it('returns 2 entries per pending matchup (one per competitor) with opponent cross-pointing', async () => {
+    const db = makeNextMatchupsDb(
+      [{ id: 'comp_1', cypherCompletedAt: new Date() }],
+      [
+        // Round 1, all resolved
+        {
+          id: 'm_r1_0',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          isBye: false,
+          winnerCompetitorId: 'c_a',
+        },
+        {
+          id: 'm_r1_1',
+          roundNumber: 1,
+          bracketPosition: 1,
+          competitorAId: 'c_c',
+          competitorBId: 'c_d',
+          isBye: false,
+          winnerCompetitorId: 'c_c',
+        },
+        // Round 2, pending
+        {
+          id: 'm_r2_0',
+          roundNumber: 2,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_c',
+          isBye: false,
+          winnerCompetitorId: null,
+        },
+      ],
+      [
+        { id: 'c_a', name: 'Alpha' },
+        { id: 'c_c', name: 'Gamma' },
+      ],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicNextMatchups({ competitionId: 'comp_1' });
+    expect(result).toHaveLength(2);
+    const forA = result.find((r) => r.competitorId === 'c_a');
+    const forC = result.find((r) => r.competitorId === 'c_c');
+    expect(forA).toMatchObject({
+      matchupId: 'm_r2_0',
+      roundNumber: 2,
+      bracketPosition: 0,
+      opponentCompetitorId: 'c_c',
+      opponentName: 'Gamma',
+    });
+    expect(forC).toMatchObject({
+      matchupId: 'm_r2_0',
+      roundNumber: 2,
+      bracketPosition: 0,
+      opponentCompetitorId: 'c_a',
+      opponentName: 'Alpha',
+    });
+  });
+
+  it('skips bye matchups when computing the current round', async () => {
+    const db = makeNextMatchupsDb(
+      [{ id: 'comp_1', cypherCompletedAt: new Date() }],
+      [
+        // Round 1 has 1 real + 1 bye; bye is pre-resolved.
+        {
+          id: 'm_bye',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_top',
+          competitorBId: null,
+          isBye: true,
+          winnerCompetitorId: 'c_top',
+        },
+        {
+          id: 'm_real',
+          roundNumber: 1,
+          bracketPosition: 1,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          isBye: false,
+          winnerCompetitorId: null,
+        },
+      ],
+      [
+        { id: 'c_a', name: 'Alpha' },
+        { id: 'c_b', name: 'Bravo' },
+      ],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicNextMatchups({ competitionId: 'comp_1' });
+    expect(result).toHaveLength(2);
+    expect(result.every((r) => r.matchupId === 'm_real')).toBe(true);
+  });
+
+  it('returns [] when all matchups are resolved', async () => {
+    const db = makeNextMatchupsDb(
+      [{ id: 'comp_1', cypherCompletedAt: new Date() }],
+      [
+        {
+          id: 'm_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          isBye: false,
+          winnerCompetitorId: 'c_a',
+        },
+      ],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicNextMatchups({ competitionId: 'comp_1' });
+    expect(result).toEqual([]);
+  });
+
+  it('throws TOO_MANY_REQUESTS once getPublicNextMatchups exceeds the per-IP rate limit', async () => {
+    const db = makeNextMatchupsDb(
+      [{ id: 'comp_1', cypherCompletedAt: null }],
+      [],
+    );
+    const c = makeCallerFor(db, makeFullGateway());
+    for (let i = 0; i < 60; i += 1) {
+      await c.tournament
+        .getPublicNextMatchups({ competitionId: 'comp_1' })
+        .catch(() => undefined);
+    }
+    const err = await c.tournament
+      .getPublicNextMatchups({ competitionId: 'comp_1' })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'TOO_MANY_REQUESTS' });
+  });
+});
+
+// ─── Story 6.2: tournament.getPublicBracket ──────────────────────────────────
+
+describe('tournament.getPublicBracket', () => {
+  // Sequential chain: 1st .where() → competition row, 2nd .where() → matchup
+  // rows (calls .orderBy()), 3rd .where() → competitor name rows.
+  function makePublicBracketDb(
+    competitionRow: unknown[] | null,
+    matchupRows: unknown[],
+    competitorNameRows: unknown[] = [],
+  ) {
+    const queue: unknown[][] = [
+      competitionRow ?? [],
+      matchupRows,
+      competitorNameRows,
+    ];
+    let idx = 0;
+    const dbMock = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockImplementation(() => {
+        const nextResult = queue[idx];
+        const looksLikeMatchups =
+          Array.isArray(nextResult) &&
+          nextResult.length > 0 &&
+          typeof (nextResult[0] as { roundNumber?: unknown })?.roundNumber ===
+            'number';
+        if (looksLikeMatchups) {
+          return {
+            orderBy: vi.fn().mockImplementation(() => {
+              const r = queue[idx++] ?? [];
+              return createLazyResult(r);
+            }),
+          };
+        }
+        const r = queue[idx++] ?? [];
+        return createLazyResult(r);
+      }),
+      orderBy: vi
+        .fn()
+        .mockImplementation(() => createLazyResult(queue[idx++] ?? [])),
+    };
+    return { db: dbMock } as any;
+  }
+
+  it('rejects empty competitionId (Zod)', async () => {
+    await expect(
+      caller(null).tournament.getPublicBracket({ competitionId: '' }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('throws NOT_FOUND when competition does not exist', async () => {
+    const db = makePublicBracketDb(null, []);
+    const err = await makeCallerFor(db, makeFullGateway())
+      .tournament.getPublicBracket({ competitionId: 'comp_404' })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('returns empty bracket when cypherCompletedAt is null', async () => {
+    const db = makePublicBracketDb(
+      [{ id: 'comp_1', cypherCompletedAt: null, status: 'active' }],
+      [],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicBracket({ competitionId: 'comp_1' });
+    expect(result).toEqual({
+      matchups: [],
+      championCompetitorId: null,
+      currentRoundNumber: null,
+    });
+  });
+
+  it('returns matchups with competitor names when battles are active', async () => {
+    const db = makePublicBracketDb(
+      [{ id: 'comp_1', cypherCompletedAt: new Date(), status: 'active' }],
+      [
+        {
+          id: 'm_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          seedA: 1,
+          seedB: 4,
+          isBye: false,
+          winnerCompetitorId: null,
+        },
+        {
+          id: 'm_2',
+          roundNumber: 1,
+          bracketPosition: 1,
+          competitorAId: 'c_c',
+          competitorBId: null,
+          seedA: 2,
+          seedB: null,
+          isBye: true,
+          winnerCompetitorId: 'c_c',
+        },
+      ],
+      [
+        { id: 'c_a', name: 'Alpha', participantId: 'P-001' },
+        { id: 'c_b', name: 'Bravo', participantId: 'P-002' },
+        { id: 'c_c', name: 'Charlie', participantId: 'P-003' },
+      ],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicBracket({ competitionId: 'comp_1' });
+
+    expect(result.matchups).toHaveLength(2);
+    expect(result.matchups[0]?.competitorA).toEqual({
+      name: 'Alpha',
+      participantId: 'P-001',
+    });
+    expect(result.matchups[0]?.competitorB).toEqual({
+      name: 'Bravo',
+      participantId: 'P-002',
+    });
+    expect(result.matchups[1]?.isBye).toBe(true);
+    expect(result.matchups[1]?.winnerCompetitorId).toBe('c_c');
+    expect(result.currentRoundNumber).toBe(1);
+    expect(result.championCompetitorId).toBeNull();
+  });
+
+  it('does not return admin-only fields (tieStatus, revoteCount, etc.)', async () => {
+    const db = makePublicBracketDb(
+      [{ id: 'comp_1', cypherCompletedAt: new Date(), status: 'active' }],
+      [
+        {
+          id: 'm_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          seedA: 1,
+          seedB: 2,
+          isBye: false,
+          winnerCompetitorId: null,
+        },
+      ],
+      [
+        { id: 'c_a', name: 'Alpha', participantId: 'P-001' },
+        { id: 'c_b', name: 'Bravo', participantId: 'P-002' },
+      ],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicBracket({ competitionId: 'comp_1' });
+    const matchup = result.matchups[0] as Record<string, unknown>;
+    expect(matchup['tieStatus']).toBeUndefined();
+    expect(matchup['revoteCount']).toBeUndefined();
+    expect(matchup['organizerDecisionReason']).toBeUndefined();
+    expect(matchup['organizerDecisionBy']).toBeUndefined();
+    expect(matchup['completedAt']).toBeUndefined();
+  });
+
+  it('detects champion when competition is completed', async () => {
+    const db = makePublicBracketDb(
+      [{ id: 'comp_1', cypherCompletedAt: new Date(), status: 'completed' }],
+      [
+        {
+          id: 'm_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          seedA: 1,
+          seedB: 2,
+          isBye: false,
+          winnerCompetitorId: 'c_a',
+        },
+        {
+          id: 'm_final',
+          roundNumber: 2,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_c',
+          seedA: 1,
+          seedB: 3,
+          isBye: false,
+          winnerCompetitorId: 'c_a',
+        },
+      ],
+      [
+        { id: 'c_a', name: 'Alpha', participantId: 'P-001' },
+        { id: 'c_b', name: 'Bravo', participantId: 'P-002' },
+        { id: 'c_c', name: 'Charlie', participantId: 'P-003' },
+      ],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicBracket({ competitionId: 'comp_1' });
+    expect(result.championCompetitorId).toBe('c_a');
+  });
+
+  it('derives currentRoundNumber from lowest unresolved non-bye round', async () => {
+    const db = makePublicBracketDb(
+      [{ id: 'comp_1', cypherCompletedAt: new Date(), status: 'active' }],
+      [
+        {
+          id: 'm_1',
+          roundNumber: 1,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_b',
+          seedA: 1,
+          seedB: 4,
+          isBye: false,
+          winnerCompetitorId: 'c_a',
+        },
+        {
+          id: 'm_2',
+          roundNumber: 2,
+          bracketPosition: 0,
+          competitorAId: 'c_a',
+          competitorBId: 'c_c',
+          seedA: 1,
+          seedB: 2,
+          isBye: false,
+          winnerCompetitorId: null,
+        },
+      ],
+      [
+        { id: 'c_a', name: 'Alpha', participantId: 'P-001' },
+        { id: 'c_b', name: 'Bravo', participantId: 'P-002' },
+        { id: 'c_c', name: 'Charlie', participantId: 'P-003' },
+      ],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicBracket({ competitionId: 'comp_1' });
+    expect(result.currentRoundNumber).toBe(2);
+  });
+
+  it('succeeds without authentication (public procedure)', async () => {
+    const db = makePublicBracketDb(
+      [{ id: 'comp_1', cypherCompletedAt: null, status: 'active' }],
+      [],
+    );
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+    ).tournament.getPublicBracket({ competitionId: 'comp_1' });
+    expect(result.matchups).toEqual([]);
+  });
+
+  it('throws TOO_MANY_REQUESTS once getPublicBracket exceeds the per-IP rate limit', async () => {
+    const db = makePublicBracketDb(
+      [{ id: 'comp_1', cypherCompletedAt: null, status: 'active' }],
+      [],
+    );
+    const c = makeCallerFor(db, makeFullGateway());
+    for (let i = 0; i < 60; i += 1) {
+      await c.tournament
+        .getPublicBracket({ competitionId: 'comp_1' })
+        .catch(() => undefined);
+    }
+    const err = await c.tournament
+      .getPublicBracket({ competitionId: 'comp_1' })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'TOO_MANY_REQUESTS' });
   });
 });
 

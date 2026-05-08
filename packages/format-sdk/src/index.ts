@@ -14,6 +14,7 @@ export type {
   ScorePayload,
   ScoreValue,
   AggregatedResult,
+  CriterionBreakdownEntry,
   ScoringSchema,
 } from './types/scoring.types';
 export type {

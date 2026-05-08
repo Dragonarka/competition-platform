@@ -24,10 +24,17 @@ export interface ScorePayload {
   idempotencyKey: string;
 }
 
+export interface CriterionBreakdownEntry {
+  criterionId: string;
+  total: string;
+  judgeCount: number;
+}
+
 export interface AggregatedResult {
   competitorId: string;
   totalScore: string;
   scoresByJudge: Record<string, string>;
+  criteriaBreakdown?: CriterionBreakdownEntry[];
 }
 
 export interface ScoringSchema {
