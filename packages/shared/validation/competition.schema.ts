@@ -16,6 +16,18 @@ export const createCompetitionSchema = z.object({
 
 export type CreateCompetitionInput = z.infer<typeof createCompetitionSchema>;
 
+export const createSimulationSchema = createCompetitionSchema.extend({
+  mockParticipantCount: z
+    .number()
+    .int()
+    .min(2, 'At least 2 participants required')
+    .max(200, 'Maximum 200 participants')
+    .optional(),
+  sourceCompetitionId: z.string().min(1).optional(),
+});
+
+export type CreateSimulationInput = z.infer<typeof createSimulationSchema>;
+
 export const startCypherPhaseSchema = z.object({
   competitionId: z.string().min(1, 'Competition ID is required'),
 });

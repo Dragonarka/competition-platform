@@ -9,9 +9,17 @@ export default function CompetitionsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-foreground">Competitions</h1>
-        <Link href="/competitions/new" className={buttonVariants()}>
-          New Competition
-        </Link>
+        <div className="flex gap-2">
+          <Link
+            href="/competitions/new?simulation=true"
+            className={buttonVariants({ variant: 'outline' })}
+          >
+            New Simulation
+          </Link>
+          <Link href="/competitions/new" className={buttonVariants()}>
+            New Competition
+          </Link>
+        </div>
       </div>
       <Suspense fallback={<CompetitionListSkeleton />}>
         <CompetitionList />

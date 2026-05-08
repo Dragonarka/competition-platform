@@ -6028,3 +6028,370 @@ describe('tournament.resolveTie (Story 5.3)', () => {
     expect(insertSpies.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// createSimulation tests (Story 7.1)
+// ---------------------------------------------------------------------------
+
+describe('tournament.createSimulation', () => {
+  it('rejects when userId is null (UNAUTHORIZED)', async () => {
+    await expect(
+      caller(null).tournament.createSimulation({
+        name: 'Test Simulation',
+        date: null,
+        description: null,
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('rejects empty name with Zod validation error', async () => {
+    await expect(
+      caller('user_123').tournament.createSimulation({
+        name: '',
+        date: null,
+        description: null,
+      }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('rejects mockParticipantCount below 2', async () => {
+    await expect(
+      caller('user_123').tournament.createSimulation({
+        name: 'Test Sim',
+        date: null,
+        description: null,
+        mockParticipantCount: 1,
+      }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('rejects mockParticipantCount above 200', async () => {
+    await expect(
+      caller('user_123').tournament.createSimulation({
+        name: 'Test Sim',
+        date: null,
+        description: null,
+        mockParticipantCount: 201,
+      }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('rejects mockParticipantCount that is not an integer', async () => {
+    await expect(
+      caller('user_123').tournament.createSimulation({
+        name: 'Test Sim',
+        date: null,
+        description: null,
+        mockParticipantCount: 5.5,
+      }),
+    ).rejects.toThrow(TRPCError);
+  });
+
+  it('creates simulation with isSimulation: true', async () => {
+    const createdRow = {
+      id: 'sim_1',
+      name: 'Test Sim',
+      description: null,
+      date: null,
+      status: 'draft',
+      isSimulation: true,
+      createdAt: new Date(),
+    };
+    const insertMock = vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue([createdRow]),
+      }),
+    });
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      insert: insertMock,
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.createSimulation({
+      name: 'Test Sim',
+      date: null,
+      description: null,
+    });
+    expect(result.isSimulation).toBe(true);
+    expect(result.id).toBe('sim_1');
+    expect(result.participantCount).toBe(0);
+    expect(result.criteriaCount).toBe(0);
+  });
+
+  it('generates mock participants with correct names and IDs', async () => {
+    const createdRow = {
+      id: 'sim_2',
+      name: 'Sim With Participants',
+      description: null,
+      date: null,
+      status: 'draft',
+      isSimulation: true,
+      createdAt: new Date(),
+    };
+    const competitorValues: unknown[] = [];
+    const insertMock = vi.fn().mockImplementation(() => ({
+      values: vi.fn().mockImplementation((vals: unknown) => {
+        if (Array.isArray(vals)) {
+          competitorValues.push(...vals);
+          return Promise.resolve([]);
+        }
+        return { returning: vi.fn().mockResolvedValue([createdRow]) };
+      }),
+    }));
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      insert: insertMock,
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.createSimulation({
+      name: 'Sim With Participants',
+      date: null,
+      description: null,
+      mockParticipantCount: 5,
+    });
+    expect(result.participantCount).toBe(5);
+    expect(competitorValues).toHaveLength(5);
+    expect(competitorValues[0]).toMatchObject({
+      participantId: 'SIM-01',
+      name: 'Competitor 01',
+    });
+    expect(competitorValues[4]).toMatchObject({
+      participantId: 'SIM-05',
+      name: 'Competitor 05',
+    });
+  });
+
+  it('clones config and criteria from source competition', async () => {
+    const sourceComp = {
+      id: 'src_comp',
+      participantFormat: 'individual',
+      cypherJudgeCount: 3,
+      cypherGroupCount: 2,
+      advancementThreshold: 8,
+      battlesJudgeCount: 5,
+      tieBreakingRule: 'organizer_decision',
+    };
+    const sourceCriteria = [
+      {
+        id: 'c1',
+        name: 'Flow',
+        minScore: '0.00',
+        maxScore: '10.00',
+        precision: 2,
+        displayOrder: 0,
+      },
+      {
+        id: 'c2',
+        name: 'Rhythm',
+        minScore: '0.00',
+        maxScore: '10.00',
+        precision: 2,
+        displayOrder: 1,
+      },
+    ];
+    const createdRow = {
+      id: 'sim_3',
+      name: 'Cloned Sim',
+      description: null,
+      date: null,
+      status: 'draft',
+      isSimulation: true,
+      createdAt: new Date(),
+    };
+
+    let selectCallIdx = 0;
+    const selectResults: unknown[][] = [[sourceComp], sourceCriteria];
+    const criteriaInserted: unknown[] = [];
+    const insertMock = vi.fn().mockImplementation(() => ({
+      values: vi.fn().mockImplementation((vals: unknown) => {
+        if (Array.isArray(vals)) {
+          criteriaInserted.push(...vals);
+          return Promise.resolve([]);
+        }
+        return { returning: vi.fn().mockResolvedValue([createdRow]) };
+      }),
+    }));
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockImplementation(() =>
+          createLazyResult(selectResults[selectCallIdx++] ?? []),
+        ),
+      insert: insertMock,
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.createSimulation({
+      name: 'Cloned Sim',
+      date: null,
+      description: null,
+      sourceCompetitionId: 'src_comp',
+    });
+    expect(result.criteriaCount).toBe(2);
+    expect(criteriaInserted).toHaveLength(2);
+    expect(criteriaInserted[0]).toMatchObject({
+      competitionId: 'sim_3',
+      name: 'Flow',
+    });
+    expect(criteriaInserted[1]).toMatchObject({
+      competitionId: 'sim_3',
+      name: 'Rhythm',
+    });
+  });
+
+  it('throws NOT_FOUND when sourceCompetitionId is invalid', async () => {
+    let selectCallIdx = 0;
+    const selectResults: unknown[][] = [[]];
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockImplementation(() =>
+          createLazyResult(selectResults[selectCallIdx++] ?? []),
+        ),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    await expect(
+      makeCallerFor(
+        db,
+        makeFullGateway(),
+        'user_1',
+      ).tournament.createSimulation({
+        name: 'Bad Clone',
+        date: null,
+        description: null,
+        sourceCompetitionId: 'nonexistent',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// list and getCompetition include isSimulation (Story 7.1)
+// ---------------------------------------------------------------------------
+
+describe('tournament.list isSimulation field', () => {
+  it('rejects when userId is null (UNAUTHORIZED)', async () => {
+    await expect(caller(null).tournament.list()).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('returns competitions with isSimulation field', async () => {
+    const compRows = [
+      {
+        id: 'c1',
+        name: 'Live Comp',
+        description: null,
+        date: null,
+        status: 'draft',
+        participantFormat: 'individual',
+        isSimulation: false,
+        createdAt: new Date(),
+      },
+      {
+        id: 'c2',
+        name: 'Sim Comp',
+        description: null,
+        date: null,
+        status: 'draft',
+        participantFormat: 'individual',
+        isSimulation: true,
+        createdAt: new Date(),
+      },
+    ];
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockResolvedValue(compRows),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.list();
+    expect(result).toHaveLength(2);
+    expect(result[0].isSimulation).toBe(false);
+    expect(result[1].isSimulation).toBe(true);
+  });
+});
+
+describe('tournament.getCompetition isSimulation field', () => {
+  it('returns competition with isSimulation field', async () => {
+    const compRow = {
+      id: 'c1',
+      name: 'Live Comp',
+      status: 'draft',
+      participantFormat: 'individual',
+      cypherJudgeCount: null,
+      cypherGroupCount: null,
+      advancementThreshold: null,
+      battlesJudgeCount: null,
+      tieBreakingRule: null,
+      cypherCompletedAt: null,
+      soloMode: false,
+      isSimulation: true,
+    };
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([compRow]),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.getCompetition({ competitionId: 'c1' });
+    expect(result.isSimulation).toBe(true);
+  });
+});

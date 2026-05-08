@@ -18,6 +18,7 @@ import {
 import type { CriteriaScoreEntry } from '@competition-platform/db';
 import {
   createCompetitionSchema,
+  createSimulationSchema,
   addCriterionSchema,
   copyCriteriaTemplateSchema,
   addParticipantSchema,
@@ -771,6 +772,7 @@ export function createTournamentRouter(
             date: competitions.date,
             status: competitions.status,
             participantFormat: competitions.participantFormat,
+            isSimulation: competitions.isSimulation,
             createdAt: competitions.createdAt,
           })
           .from(competitions)
@@ -803,6 +805,122 @@ export function createTournamentRouter(
               createdAt: competitions.createdAt,
             });
           return created;
+        });
+      }),
+
+    createSimulation: protectedProcedure
+      .input(createSimulationSchema)
+      .mutation(async ({ ctx, input }) => {
+        return db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+
+          let sourceComp:
+            | {
+                participantFormat: typeof competitions.$inferSelect.participantFormat;
+                cypherJudgeCount: typeof competitions.$inferSelect.cypherJudgeCount;
+                cypherGroupCount: typeof competitions.$inferSelect.cypherGroupCount;
+                advancementThreshold: typeof competitions.$inferSelect.advancementThreshold;
+                battlesJudgeCount: typeof competitions.$inferSelect.battlesJudgeCount;
+                tieBreakingRule: typeof competitions.$inferSelect.tieBreakingRule;
+              }
+            | undefined;
+
+          if (input.sourceCompetitionId) {
+            const [fetched] = await tx
+              .select({
+                id: competitions.id,
+                participantFormat: competitions.participantFormat,
+                cypherJudgeCount: competitions.cypherJudgeCount,
+                cypherGroupCount: competitions.cypherGroupCount,
+                advancementThreshold: competitions.advancementThreshold,
+                battlesJudgeCount: competitions.battlesJudgeCount,
+                tieBreakingRule: competitions.tieBreakingRule,
+              })
+              .from(competitions)
+              .where(eq(competitions.id, input.sourceCompetitionId));
+            if (!fetched) {
+              throw new TRPCError({
+                code: 'NOT_FOUND',
+                message: 'Source competition not found',
+              });
+            }
+            sourceComp = fetched;
+          }
+
+          const [created] = await tx
+            .insert(competitions)
+            .values({
+              organizerClerkId: ctx.userId,
+              name: input.name,
+              description: input.description ?? null,
+              date: input.date ? new Date(input.date) : null,
+              isSimulation: true,
+              ...(sourceComp
+                ? {
+                    participantFormat: sourceComp.participantFormat,
+                    cypherJudgeCount: sourceComp.cypherJudgeCount,
+                    cypherGroupCount: sourceComp.cypherGroupCount,
+                    advancementThreshold: sourceComp.advancementThreshold,
+                    battlesJudgeCount: sourceComp.battlesJudgeCount,
+                    tieBreakingRule: sourceComp.tieBreakingRule,
+                  }
+                : {}),
+            })
+            .returning({
+              id: competitions.id,
+              name: competitions.name,
+              description: competitions.description,
+              date: competitions.date,
+              status: competitions.status,
+              isSimulation: competitions.isSimulation,
+              createdAt: competitions.createdAt,
+            });
+
+          let criteriaCount = 0;
+          if (input.sourceCompetitionId && sourceComp) {
+            const sourceCriteria = await tx
+              .select()
+              .from(evaluationCriteria)
+              .where(
+                eq(evaluationCriteria.competitionId, input.sourceCompetitionId),
+              )
+              .orderBy(evaluationCriteria.displayOrder);
+            if (sourceCriteria.length > 0) {
+              await tx.insert(evaluationCriteria).values(
+                sourceCriteria.map((c, i) => ({
+                  competitionId: created.id,
+                  name: c.name,
+                  minScore: c.minScore,
+                  maxScore: c.maxScore,
+                  precision: c.precision,
+                  displayOrder: i,
+                })),
+              );
+              criteriaCount = sourceCriteria.length;
+            }
+          }
+
+          let participantCount = 0;
+          if (input.mockParticipantCount) {
+            const padWidth = input.mockParticipantCount >= 100 ? 3 : 2;
+            const mockCompetitors = Array.from(
+              { length: input.mockParticipantCount },
+              (_, i) => {
+                const num = String(i + 1).padStart(padWidth, '0');
+                return {
+                  competitionId: created.id,
+                  participantId: `SIM-${num}`,
+                  name: `Competitor ${num}`,
+                };
+              },
+            );
+            await tx.insert(competitors).values(mockCompetitors);
+            participantCount = input.mockParticipantCount;
+          }
+
+          return { ...created, participantCount, criteriaCount };
         });
       }),
 
@@ -985,6 +1103,7 @@ export function createTournamentRouter(
               tieBreakingRule: competitions.tieBreakingRule,
               cypherCompletedAt: competitions.cypherCompletedAt,
               soloMode: competitions.soloMode,
+              isSimulation: competitions.isSimulation,
             })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));

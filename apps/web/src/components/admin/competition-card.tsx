@@ -16,11 +16,18 @@ export function CompetitionCard({ competition }: { competition: Competition }) {
     >
       <div className="flex items-start justify-between gap-2 mb-1">
         <h3 className="font-medium text-foreground leading-tight">{competition.name}</h3>
-        <span
-          className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${statusStyles[competition.status]}`}
-        >
-          {competition.status}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {competition.isSimulation && (
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
+              SIMULATION
+            </span>
+          )}
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${statusStyles[competition.status]}`}
+          >
+            {competition.status}
+          </span>
+        </div>
       </div>
       {competition.description && (
         <p className="text-muted-foreground text-xs mb-2 line-clamp-2">{competition.description}</p>

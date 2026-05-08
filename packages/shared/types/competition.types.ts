@@ -7,4 +7,5 @@ export interface Competition {
   date: string | null; // ISO 8601 — tRPC serializes timestamps as strings
   status: CompetitionStatus;
   createdAt: string; // ISO 8601
+  isSimulation: boolean;
 }

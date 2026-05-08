@@ -86,11 +86,11 @@ development_status:
   6-1-public-standings-with-score-breakdowns: done
   6-2-full-battles-bracket-view-on-public-url: done
   6-3-presenter-mc-teleprompter-view: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
 
   # ─── Epic 7: Simulation Mode & Judge Training ───
-  epic-7: backlog
-  7-1-create-a-simulation-competition: backlog
+  epic-7: in-progress
+  7-1-create-a-simulation-competition: done
   7-2-organizer-runs-full-simulation-as-all-roles: backlog
   7-3-simulation-reset-and-judge-training-access: backlog
   epic-7-retrospective: optional

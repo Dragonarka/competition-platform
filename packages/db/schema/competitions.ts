@@ -29,6 +29,7 @@ export const competitions = pgTable('competitions', {
   tieBreakingRule: tieBreakingRuleEnum('tie_breaking_rule'),
   cypherCompletedAt: timestamp('cypher_completed_at', { withTimezone: true }),
   soloMode: boolean('solo_mode').notNull().default(false),
+  isSimulation: boolean('is_simulation').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
