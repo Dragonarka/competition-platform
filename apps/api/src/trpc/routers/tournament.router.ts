@@ -1,9 +1,10 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
-import { sql, eq, desc, max, and, asc, inArray } from 'drizzle-orm';
+import { sql, eq, desc, max, and, asc, inArray, like } from 'drizzle-orm';
 import { z } from 'zod';
 import { t } from '../trpc.init';
 import { protectedProcedure } from '../trpc.procedures';
+import { resolveOrganizerJudgeSession } from './helpers/resolve-organizer-judge-session';
 import {
   competitions,
   evaluationCriteria,
@@ -40,6 +41,7 @@ import {
   submitVoteSchema,
   submitOrganizerVoteSchema,
   resolveTieSchema,
+  resetSimulationSchema,
   ErrorCodes,
 } from '@competition-platform/shared';
 import type {
@@ -58,6 +60,7 @@ import type {
   VoteSubmittedPayload,
   CompetitorWithdrawnPayload,
   CompetitorRescuedPayload,
+  SimulationResetPayload,
   StandingsEntry,
   JudgeLiveStatus,
 } from '@competition-platform/shared';
@@ -1303,6 +1306,7 @@ export function createTournamentRouter(
             .select({
               id: competitions.id,
               status: competitions.status,
+              isSimulation: competitions.isSimulation,
             })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));
@@ -1310,6 +1314,13 @@ export function createTournamentRouter(
             throw new TRPCError({
               code: 'NOT_FOUND',
               message: 'Competition not found',
+            });
+          }
+          if (comp.isSimulation) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Solo mode is not applicable to simulation competitions',
+              cause: { errorCode: ErrorCodes.SIMULATION_NOT_ENABLED },
             });
           }
           if (comp.status !== 'draft') {
@@ -1332,6 +1343,228 @@ export function createTournamentRouter(
               soloMode: competitions.soloMode,
             });
           return updated;
+        });
+      }),
+
+    resetSimulation: protectedProcedure
+      .input(resetSimulationSchema)
+      .mutation(async ({ ctx, input }) => {
+        let broadcastPayload: SimulationResetPayload | null = null;
+        const result = await db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+
+          // 1. Ownership SELECT.
+          const [comp] = await tx
+            .select({
+              id: competitions.id,
+              isSimulation: competitions.isSimulation,
+              status: competitions.status,
+            })
+            .from(competitions)
+            .where(
+              and(
+                eq(competitions.id, input.competitionId),
+                eq(competitions.organizerClerkId, ctx.userId),
+              ),
+            );
+          if (!comp) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Competition not found',
+            });
+          }
+          if (!comp.isSimulation) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Reset is only available for simulation competitions',
+              cause: { errorCode: ErrorCodes.SIMULATION_NOT_ENABLED },
+            });
+          }
+
+          // 2. Advisory lock — serialize concurrent resets.
+          await tx.execute(
+            sql`SELECT pg_advisory_xact_lock(hashtext(${`sim-reset-${input.competitionId}`}))`,
+          );
+
+          // 3. DELETE run-state rows in cascade-safe order. RETURNING id for
+          // the audit event.
+          const deletedVotes = await tx
+            .delete(votes)
+            .where(eq(votes.competitionId, input.competitionId))
+            .returning({ id: votes.id });
+          const deletedScores = await tx
+            .delete(scores)
+            .where(eq(scores.competitionId, input.competitionId))
+            .returning({ id: scores.id });
+          const deletedMatchups = await tx
+            .delete(battleMatchups)
+            .where(eq(battleMatchups.competitionId, input.competitionId))
+            .returning({ id: battleMatchups.id });
+          const deletedAssignments = await tx
+            .delete(competitorGroupAssignments)
+            .where(
+              eq(competitorGroupAssignments.competitionId, input.competitionId),
+            )
+            .returning({ id: competitorGroupAssignments.id });
+
+          // 4. Reset competition to draft.
+          await tx
+            .update(competitions)
+            .set({
+              status: 'draft',
+              cypherCompletedAt: null,
+              updatedAt: new Date(),
+            })
+            .where(eq(competitions.id, input.competitionId));
+
+          // 5. Append simulation.reset event (audit trail — AC #5).
+          const [seqRow] = await tx
+            .select({ maxSeq: max(events.sequence) })
+            .from(events)
+            .where(
+              and(
+                eq(events.aggregateId, input.competitionId),
+                eq(events.aggregateType, 'competition'),
+              ),
+            );
+          const nextSeq = (seqRow?.maxSeq ?? 0) + 1;
+
+          const payload: SimulationResetPayload = {
+            competitionId: input.competitionId,
+            resetAt: new Date().toISOString(),
+            scoresDeleted: deletedScores.length,
+            votesDeleted: deletedVotes.length,
+            matchupsDeleted: deletedMatchups.length,
+            groupAssignmentsDeleted: deletedAssignments.length,
+          };
+          try {
+            await tx.insert(events).values({
+              type: 'simulation.reset',
+              aggregateId: input.competitionId,
+              aggregateType: 'competition',
+              payload: payload as unknown as Record<string, unknown>,
+              sequence: nextSeq,
+              createdBy: ctx.userId,
+            });
+          } catch (err: unknown) {
+            if ((err as { code?: string }).code === '23505') {
+              throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: 'Concurrent simulation reset, please retry',
+              });
+            }
+            throw err;
+          }
+
+          broadcastPayload = payload;
+          return payload;
+        });
+
+        if (broadcastPayload !== null) {
+          gateway.broadcastSimulationReset(
+            input.competitionId,
+            broadcastPayload,
+          );
+        }
+        return result;
+      }),
+
+    listSimulationResetEvents: protectedProcedure
+      .input(z.object({ competitionId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        return db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+          const [comp] = await tx
+            .select({
+              id: competitions.id,
+              isSimulation: competitions.isSimulation,
+            })
+            .from(competitions)
+            .where(
+              and(
+                eq(competitions.id, input.competitionId),
+                eq(competitions.organizerClerkId, ctx.userId),
+              ),
+            );
+          if (!comp) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Competition not found',
+            });
+          }
+          if (!comp.isSimulation) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Not a simulation competition',
+              cause: { errorCode: ErrorCodes.SIMULATION_NOT_ENABLED },
+            });
+          }
+          const rows = await tx
+            .select({
+              payload: events.payload,
+              createdAt: events.createdAt,
+            })
+            .from(events)
+            .where(
+              and(
+                eq(events.aggregateId, input.competitionId),
+                eq(events.aggregateType, 'competition'),
+                eq(events.type, 'simulation.reset'),
+              ),
+            )
+            .orderBy(desc(events.createdAt));
+          return rows.map((r) => ({
+            ...(r.payload as unknown as SimulationResetPayload),
+            createdAt: r.createdAt.toISOString(),
+          }));
+        });
+      }),
+
+    listSimulatedJudgeSessions: protectedProcedure
+      .input(z.object({ competitionId: z.string().min(1) }))
+      .query(async ({ ctx, input }) => {
+        return db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+          const [comp] = await tx
+            .select({
+              id: competitions.id,
+              isSimulation: competitions.isSimulation,
+            })
+            .from(competitions)
+            .where(eq(competitions.id, input.competitionId));
+          if (!comp) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Competition not found',
+            });
+          }
+          if (!comp.isSimulation) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Not a simulation competition',
+              cause: { errorCode: ErrorCodes.SIMULATION_NOT_ENABLED },
+            });
+          }
+          return tx
+            .select({
+              id: judgeSessions.id,
+              label: judgeSessions.label,
+              groupIndex: judgeSessions.groupIndex,
+            })
+            .from(judgeSessions)
+            .where(
+              and(
+                eq(judgeSessions.competitionId, input.competitionId),
+                like(judgeSessions.label, 'Sim Judge%'),
+              ),
+            )
+            .orderBy(asc(judgeSessions.label));
         });
       }),
 
@@ -1466,6 +1699,7 @@ export function createTournamentRouter(
             name: competitions.name,
             status: competitions.status,
             cypherCompletedAt: competitions.cypherCompletedAt,
+            isSimulation: competitions.isSimulation,
           })
           .from(competitions)
           .where(eq(competitions.id, session.competitionId));
@@ -1482,6 +1716,7 @@ export function createTournamentRouter(
           competitionName: comp.name,
           competitionStatus: comp.status,
           cypherCompletedAt: comp.cypherCompletedAt?.toISOString() ?? null,
+          isSimulation: comp.isSimulation,
         };
       }),
 
@@ -1499,7 +1734,9 @@ export function createTournamentRouter(
               id: competitions.id,
               status: competitions.status,
               cypherGroupCount: competitions.cypherGroupCount,
+              cypherJudgeCount: competitions.cypherJudgeCount,
               soloMode: competitions.soloMode,
+              isSimulation: competitions.isSimulation,
             })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));
@@ -1562,12 +1799,55 @@ export function createTournamentRouter(
           // 6. Load judge sessions — must have at least groupCount sessions.
           // Solo mode bypasses this check entirely; the organizer's judge
           // session is auto-created on their first submitOrganizerScore call.
-          const allJudgeSessions = await tx
+          // Simulations also bypass — sim sessions are auto-created below so
+          // the round-robin assignment + competition.started event payload
+          // are byte-identical to live competitions.
+          let allJudgeSessions = await tx
             .select({ id: judgeSessions.id })
             .from(judgeSessions)
             .where(eq(judgeSessions.competitionId, input.competitionId))
             .orderBy(asc(judgeSessions.createdAt));
-          if (!comp.soloMode && allJudgeSessions.length < groupCount) {
+
+          if (
+            comp.isSimulation &&
+            comp.cypherGroupCount &&
+            comp.cypherJudgeCount
+          ) {
+            const desired = comp.cypherGroupCount * comp.cypherJudgeCount;
+            if (allJudgeSessions.length < desired) {
+              const toCreate = [] as {
+                competitionId: string;
+                tokenHash: string;
+                label: string;
+                createdBy: string;
+                groupIndex: number;
+              }[];
+              for (let j = 0; j < comp.cypherJudgeCount; j++) {
+                for (let g = 0; g < comp.cypherGroupCount; g++) {
+                  const { hash } = generateJudgeToken();
+                  toCreate.push({
+                    competitionId: input.competitionId,
+                    tokenHash: hash,
+                    label: `Sim Judge G${String.fromCharCode(65 + g)}-J${j + 1}`,
+                    createdBy: ctx.userId,
+                    groupIndex: g,
+                  });
+                }
+              }
+              await tx.insert(judgeSessions).values(toCreate);
+              allJudgeSessions = await tx
+                .select({ id: judgeSessions.id })
+                .from(judgeSessions)
+                .where(eq(judgeSessions.competitionId, input.competitionId))
+                .orderBy(asc(judgeSessions.createdAt));
+            }
+          }
+
+          if (
+            !comp.soloMode &&
+            !comp.isSimulation &&
+            allJudgeSessions.length < groupCount
+          ) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
               message: `At least ${groupCount} judge links must be generated (one per group)`,
@@ -3027,6 +3307,9 @@ export function createTournamentRouter(
               id: competitions.id,
               status: competitions.status,
               soloMode: competitions.soloMode,
+              isSimulation: competitions.isSimulation,
+              cypherGroupCount: competitions.cypherGroupCount,
+              cypherJudgeCount: competitions.cypherJudgeCount,
             })
             .from(competitions)
             .where(
@@ -3051,14 +3334,60 @@ export function createTournamentRouter(
             });
           }
 
-          // 3. Solo mode guard (AC #6).
-          if (!comp.soloMode) {
+          // 3. Mode guard — organizer scoring requires solo OR simulation.
+          if (!comp.soloMode && !comp.isSimulation) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
               message:
-                'Solo scoring is only available when solo mode is enabled',
-              cause: { errorCode: ErrorCodes.SOLO_MODE_NOT_ENABLED },
+                'Organizer scoring requires solo mode or simulation mode',
+              cause: { errorCode: ErrorCodes.ORGANIZER_SCORING_NOT_ENABLED },
             });
+          }
+
+          // Simulation takes precedence: if both flags somehow set, we use the
+          // stricter (multi-judge) simulation path.
+          const mode: 'solo' | 'simulation-cypher' = comp.isSimulation
+            ? 'simulation-cypher'
+            : 'solo';
+
+          if (mode === 'simulation-cypher') {
+            if (
+              input.simulatedGroupIndex === undefined ||
+              input.simulatedJudgeIndex === undefined
+            ) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message:
+                  'simulatedGroupIndex and simulatedJudgeIndex are required for simulation scoring',
+                cause: {
+                  errorCode: ErrorCodes.SIMULATION_JUDGE_INDEX_OUT_OF_RANGE,
+                },
+              });
+            }
+            if (
+              !comp.cypherGroupCount ||
+              input.simulatedGroupIndex >= comp.cypherGroupCount
+            ) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `simulatedGroupIndex must be less than ${comp.cypherGroupCount ?? 0}`,
+                cause: {
+                  errorCode: ErrorCodes.SIMULATION_JUDGE_INDEX_OUT_OF_RANGE,
+                },
+              });
+            }
+            if (
+              !comp.cypherJudgeCount ||
+              input.simulatedJudgeIndex >= comp.cypherJudgeCount
+            ) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `simulatedJudgeIndex must be less than ${comp.cypherJudgeCount ?? 0}`,
+                cause: {
+                  errorCode: ErrorCodes.SIMULATION_JUDGE_INDEX_OUT_OF_RANGE,
+                },
+              });
+            }
           }
 
           // 4. Verify competitor belongs to this competition AND is active
@@ -3081,43 +3410,22 @@ export function createTournamentRouter(
             });
           }
 
-          // 5. Find or create the organizer's judge session.
-          await tx.execute(
-            sql`SELECT pg_advisory_xact_lock(hashtext(${`org-session-${input.competitionId}-${ctx.userId}`}))`,
-          );
-          let organizerSessionId: string;
-          const [existingSession] = await tx
-            .select({ id: judgeSessions.id })
-            .from(judgeSessions)
-            .where(
-              and(
-                eq(judgeSessions.competitionId, input.competitionId),
-                eq(judgeSessions.createdBy, ctx.userId),
-                eq(judgeSessions.label, 'Organizer'),
-              ),
-            );
-          if (existingSession) {
-            organizerSessionId = existingSession.id;
-          } else {
-            const { hash } = generateJudgeToken();
-            const [created] = await tx
-              .insert(judgeSessions)
-              .values({
-                competitionId: input.competitionId,
-                tokenHash: hash,
-                label: 'Organizer',
-                createdBy: ctx.userId,
-                groupIndex: 0,
-              })
-              .returning({ id: judgeSessions.id });
-            if (!created) {
-              throw new TRPCError({
-                code: 'INTERNAL_SERVER_ERROR',
-                message: 'Failed to create organizer scoring session',
-              });
-            }
-            organizerSessionId = created.id;
-          }
+          // 5. Resolve the organizer/sim judge session (find-or-create).
+          const { judgeSessionId: organizerSessionId } =
+            await resolveOrganizerJudgeSession({
+              tx,
+              competitionId: input.competitionId,
+              organizerClerkId: ctx.userId,
+              mode,
+              simulatedGroupIndex:
+                mode === 'simulation-cypher'
+                  ? input.simulatedGroupIndex
+                  : undefined,
+              simulatedJudgeIndex:
+                mode === 'simulation-cypher'
+                  ? input.simulatedJudgeIndex
+                  : undefined,
+            });
 
           // 6. Idempotency check.
           const [existing] = await tx
@@ -3251,6 +3559,8 @@ export function createTournamentRouter(
               id: competitions.id,
               status: competitions.status,
               soloMode: competitions.soloMode,
+              isSimulation: competitions.isSimulation,
+              battlesJudgeCount: competitions.battlesJudgeCount,
               cypherCompletedAt: competitions.cypherCompletedAt,
             })
             .from(competitions)
@@ -3276,54 +3586,56 @@ export function createTournamentRouter(
             });
           }
 
-          // 3. Solo mode guard (mirror Story 4.4 AC #6).
-          if (!comp.soloMode) {
+          // 3. Mode guard — organizer voting requires solo OR simulation.
+          if (!comp.soloMode && !comp.isSimulation) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message:
-                'Solo voting is only available when solo mode is enabled',
-              cause: { errorCode: ErrorCodes.SOLO_MODE_NOT_ENABLED },
+              message: 'Organizer voting requires solo mode or simulation mode',
+              cause: { errorCode: ErrorCodes.ORGANIZER_SCORING_NOT_ENABLED },
             });
           }
 
-          // 4. Find or create the organizer's judge session (shared with cypher
-          //    solo). Same find-or-create + advisory-lock pattern as Story 4.4.
-          await tx.execute(
-            sql`SELECT pg_advisory_xact_lock(hashtext(${`org-session-${input.competitionId}-${ctx.userId}`}))`,
-          );
-          let organizerSessionId: string;
-          const [existingSession] = await tx
-            .select({ id: judgeSessions.id })
-            .from(judgeSessions)
-            .where(
-              and(
-                eq(judgeSessions.competitionId, input.competitionId),
-                eq(judgeSessions.createdBy, ctx.userId),
-                eq(judgeSessions.label, 'Organizer'),
-              ),
-            );
-          if (existingSession) {
-            organizerSessionId = existingSession.id;
-          } else {
-            const { hash } = generateJudgeToken();
-            const [created] = await tx
-              .insert(judgeSessions)
-              .values({
-                competitionId: input.competitionId,
-                tokenHash: hash,
-                label: 'Organizer',
-                createdBy: ctx.userId,
-                groupIndex: 0,
-              })
-              .returning({ id: judgeSessions.id });
-            if (!created) {
+          const mode: 'solo' | 'simulation-battles' = comp.isSimulation
+            ? 'simulation-battles'
+            : 'solo';
+
+          if (mode === 'simulation-battles') {
+            if (input.simulatedJudgeIndex === undefined) {
               throw new TRPCError({
-                code: 'INTERNAL_SERVER_ERROR',
-                message: 'Failed to create organizer voting session',
+                code: 'BAD_REQUEST',
+                message:
+                  'simulatedJudgeIndex is required for simulation voting',
+                cause: {
+                  errorCode: ErrorCodes.SIMULATION_JUDGE_INDEX_OUT_OF_RANGE,
+                },
               });
             }
-            organizerSessionId = created.id;
+            if (
+              !comp.battlesJudgeCount ||
+              input.simulatedJudgeIndex >= comp.battlesJudgeCount
+            ) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `simulatedJudgeIndex must be less than ${comp.battlesJudgeCount ?? 0}`,
+                cause: {
+                  errorCode: ErrorCodes.SIMULATION_JUDGE_INDEX_OUT_OF_RANGE,
+                },
+              });
+            }
           }
+
+          // 4. Resolve the organizer/sim judge session (find-or-create).
+          const { judgeSessionId: organizerSessionId } =
+            await resolveOrganizerJudgeSession({
+              tx,
+              competitionId: input.competitionId,
+              organizerClerkId: ctx.userId,
+              mode,
+              simulatedJudgeIndex:
+                mode === 'simulation-battles'
+                  ? input.simulatedJudgeIndex
+                  : undefined,
+            });
 
           // 5. Idempotency-by-key.
           const [existingByKey] = await tx
@@ -4235,8 +4547,19 @@ export function createTournamentRouter(
               name: competitors.name,
               status: competitors.status,
               createdAt: competitors.createdAt,
+              groupIndex: competitorGroupAssignments.groupIndex,
             })
             .from(competitors)
+            .leftJoin(
+              competitorGroupAssignments,
+              and(
+                eq(
+                  competitorGroupAssignments.competitionId,
+                  competitors.competitionId,
+                ),
+                eq(competitorGroupAssignments.competitorId, competitors.id),
+              ),
+            )
             .where(eq(competitors.competitionId, input.competitionId))
             .orderBy(asc(competitors.name));
         });

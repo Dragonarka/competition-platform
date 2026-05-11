@@ -10,6 +10,7 @@ import { BattlesVotingPanel } from '@/components/admin/battles-voting-panel';
 import { TieResolutionBanner } from '@/components/admin/tie-resolution-banner';
 import { LiveDashboardLink } from '@/components/admin/live-dashboard-link';
 import { SimulateConfigLink } from '@/components/admin/simulate-config-link';
+import { OpenSimulationLink } from '@/components/admin/open-simulation-link';
 import { CompetitorManagementPanel } from '@/components/admin/competitor-management-panel';
 import { SoloScoringPanel } from '@/components/admin/solo-scoring-panel';
 
@@ -24,6 +25,7 @@ export default async function CompetitionConfigPage({
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-foreground">Competition Configuration</h1>
         <div className="flex items-center gap-2">
+          <OpenSimulationLink competitionId={id} />
           <SimulateConfigLink competitionId={id} />
           <LiveDashboardLink competitionId={id} />
         </div>

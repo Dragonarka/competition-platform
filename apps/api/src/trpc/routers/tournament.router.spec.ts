@@ -34,6 +34,7 @@ const mockGateway: ICompetitionGateway = {
   broadcastScoreOverridden: vi.fn(),
   broadcastCompetitorWithdrawn: vi.fn(),
   broadcastCompetitorRescued: vi.fn(),
+  broadcastSimulationReset: vi.fn(),
   getJudgePresence: vi.fn().mockReturnValue([]),
   clearPresence: vi.fn(),
 };
@@ -692,6 +693,7 @@ function makeFullGateway(): ICompetitionGateway {
     broadcastJudgeStatusChanged: vi.fn(),
     broadcastCompetitorWithdrawn: vi.fn(),
     broadcastCompetitorRescued: vi.fn(),
+    broadcastSimulationReset: vi.fn(),
     getJudgePresence: vi.fn().mockReturnValue([]),
     clearPresence: vi.fn(),
   };
@@ -4142,6 +4144,7 @@ describe('tournament.listCompetitorsWithStatus', () => {
       execute: vi.fn().mockResolvedValue(undefined),
       select: vi.fn().mockReturnThis(),
       from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockResolvedValue([]),
     };
     const db = {
@@ -4168,6 +4171,7 @@ describe('tournament.listCompetitorsWithStatus', () => {
         name: 'Alice',
         status: 'active' as const,
         createdAt: new Date(),
+        groupIndex: null,
       },
       {
         id: 'c2',
@@ -4175,6 +4179,7 @@ describe('tournament.listCompetitorsWithStatus', () => {
         name: 'Bob',
         status: 'withdrawn' as const,
         createdAt: new Date(),
+        groupIndex: null,
       },
     ];
     let callCount = 0;
@@ -4182,6 +4187,7 @@ describe('tournament.listCompetitorsWithStatus', () => {
       execute: vi.fn().mockResolvedValue(undefined),
       select: vi.fn().mockReturnThis(),
       from: vi.fn().mockReturnThis(),
+      leftJoin: vi.fn().mockReturnThis(),
       where: vi.fn().mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
@@ -4470,9 +4476,20 @@ describe('tournament.submitOrganizerScore', () => {
     });
   });
 
-  it('rejects with SOLO_MODE_NOT_ENABLED when soloMode is false (AC #6)', async () => {
+  it('rejects with ORGANIZER_SCORING_NOT_ENABLED when neither soloMode nor isSimulation (AC #6 / Story 7.2)', async () => {
     const { db } = makeOrganizerScoreDb({
-      whereResults: [[{ id: 'comp_abc', status: 'active', soloMode: false }]],
+      whereResults: [
+        [
+          {
+            id: 'comp_abc',
+            status: 'active',
+            soloMode: false,
+            isSimulation: false,
+            cypherGroupCount: 1,
+            cypherJudgeCount: 1,
+          },
+        ],
+      ],
     });
     let err: unknown;
     try {
@@ -4486,7 +4503,7 @@ describe('tournament.submitOrganizerScore', () => {
     }
     expect(err).toMatchObject({ code: 'BAD_REQUEST' });
     expect((err as { cause?: unknown }).cause).toMatchObject({
-      errorCode: 'SOLO_MODE_NOT_ENABLED',
+      errorCode: 'ORGANIZER_SCORING_NOT_ENABLED',
     });
   });
 
@@ -5446,7 +5463,7 @@ describe('tournament.submitOrganizerVote', () => {
     });
   });
 
-  it('throws SOLO_MODE_NOT_ENABLED when soloMode is false', async () => {
+  it('throws ORGANIZER_SCORING_NOT_ENABLED when neither soloMode nor isSimulation (Story 7.2)', async () => {
     let idx = 0;
     const results: unknown[][] = [
       [
@@ -5454,6 +5471,8 @@ describe('tournament.submitOrganizerVote', () => {
           id: 'comp_1',
           status: 'active',
           soloMode: false,
+          isSimulation: false,
+          battlesJudgeCount: 1,
           cypherCompletedAt: new Date(),
         },
       ],
@@ -5480,7 +5499,7 @@ describe('tournament.submitOrganizerVote', () => {
       })
       .catch((e: TRPCError) => e);
     expect((err as any).cause).toMatchObject({
-      errorCode: 'SOLO_MODE_NOT_ENABLED',
+      errorCode: 'ORGANIZER_SCORING_NOT_ENABLED',
     });
   });
 
@@ -6393,5 +6412,1114 @@ describe('tournament.getCompetition isSimulation field', () => {
       'user_1',
     ).tournament.getCompetition({ competitionId: 'c1' });
     expect(result.isSimulation).toBe(true);
+  });
+});
+
+// ─── Story 7.2: Organizer Runs Full Simulation as All Roles ─────────────────
+
+describe('tournament.submitOrganizerScore (simulation mode)', () => {
+  const SIM_INPUT = {
+    competitionId: 'comp_sim',
+    competitorId: 'competitor_1',
+    scores: [{ criterionId: 'c_flow', value: '7.50' }],
+    idempotencyKey: 'sim-idem-1',
+    simulatedGroupIndex: 1,
+    simulatedJudgeIndex: 0,
+  };
+
+  it('rejects unauthenticated callers', async () => {
+    await expect(
+      caller(null).tournament.submitOrganizerScore(SIM_INPUT),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('Zod rejects simulatedGroupIndex below 0', async () => {
+    await expect(
+      caller('user_1').tournament.submitOrganizerScore({
+        ...SIM_INPUT,
+        simulatedGroupIndex: -1,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('Zod rejects simulatedGroupIndex above 25', async () => {
+    await expect(
+      caller('user_1').tournament.submitOrganizerScore({
+        ...SIM_INPUT,
+        simulatedGroupIndex: 26,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('Zod rejects non-integer simulatedJudgeIndex', async () => {
+    await expect(
+      caller('user_1').tournament.submitOrganizerScore({
+        ...SIM_INPUT,
+        simulatedJudgeIndex: 1.5,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('rejects with SIMULATION_JUDGE_INDEX_OUT_OF_RANGE when group >= cypherGroupCount', async () => {
+    const { db } = makeOrganizerScoreDb({
+      whereResults: [
+        [
+          {
+            id: 'comp_sim',
+            status: 'active',
+            soloMode: false,
+            isSimulation: true,
+            cypherGroupCount: 2,
+            cypherJudgeCount: 3,
+          },
+        ],
+      ],
+    });
+    let err: unknown;
+    try {
+      await makeCallerFor(
+        db,
+        makeFullGateway(),
+        'user_1',
+      ).tournament.submitOrganizerScore({
+        ...SIM_INPUT,
+        simulatedGroupIndex: 2,
+      });
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toMatchObject({ code: 'BAD_REQUEST' });
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_JUDGE_INDEX_OUT_OF_RANGE',
+    });
+  });
+
+  it('rejects with SIMULATION_JUDGE_INDEX_OUT_OF_RANGE when judge >= cypherJudgeCount', async () => {
+    const { db } = makeOrganizerScoreDb({
+      whereResults: [
+        [
+          {
+            id: 'comp_sim',
+            status: 'active',
+            soloMode: false,
+            isSimulation: true,
+            cypherGroupCount: 2,
+            cypherJudgeCount: 3,
+          },
+        ],
+      ],
+    });
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.submitOrganizerScore({
+        ...SIM_INPUT,
+        simulatedJudgeIndex: 3,
+      })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_JUDGE_INDEX_OUT_OF_RANGE',
+    });
+  });
+
+  it('rejects with SIMULATION_JUDGE_INDEX_OUT_OF_RANGE when sim indices are missing', async () => {
+    const { db } = makeOrganizerScoreDb({
+      whereResults: [
+        [
+          {
+            id: 'comp_sim',
+            status: 'active',
+            soloMode: false,
+            isSimulation: true,
+            cypherGroupCount: 2,
+            cypherJudgeCount: 3,
+          },
+        ],
+      ],
+    });
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.submitOrganizerScore({
+        competitionId: 'comp_sim',
+        competitorId: 'competitor_1',
+        scores: [{ criterionId: 'c_flow', value: '7.50' }],
+        idempotencyKey: 'sim-idem-x',
+      })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_JUDGE_INDEX_OUT_OF_RANGE',
+    });
+  });
+
+  it('happy path FIRST submission: creates Sim Judge GB-J1 session, scores under it', async () => {
+    const gateway = makeFullGateway();
+    const { db, insertSpies } = makeOrganizerScoreDb({
+      whereResults: [
+        [
+          {
+            id: 'comp_sim',
+            status: 'active',
+            soloMode: false,
+            isSimulation: true,
+            cypherGroupCount: 2,
+            cypherJudgeCount: 3,
+          },
+        ],
+        [{ id: 'competitor_1' }], // competitor active
+        [], // existing sim session lookup — empty
+        [], // idempotency check
+        [{ id: 'c_flow', name: 'Flow', minScore: '0.00', maxScore: '10.00' }],
+        [{ maxSeq: 0 }],
+      ],
+      insertReturning: [{ id: 'sim_session_b1' }],
+    });
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_1',
+    ).tournament.submitOrganizerScore(SIM_INPUT);
+
+    expect(result).toMatchObject({ success: true, idempotent: false });
+    expect(insertSpies).toHaveLength(3);
+
+    const sessionInsertArgs = (
+      insertSpies[0]!.values as ReturnType<typeof vi.fn>
+    ).mock.calls[0]?.[0];
+    expect(sessionInsertArgs).toMatchObject({
+      competitionId: 'comp_sim',
+      label: 'Sim Judge GB-J1',
+      createdBy: 'user_1',
+      groupIndex: 1,
+    });
+
+    const scoreInsertArgs = (insertSpies[1]!.values as ReturnType<typeof vi.fn>)
+      .mock.calls[0]?.[0];
+    expect(scoreInsertArgs).toMatchObject({
+      competitionId: 'comp_sim',
+      judgeSessionId: 'sim_session_b1',
+      competitorId: 'competitor_1',
+    });
+
+    expect(gateway.broadcastScoreSubmitted).toHaveBeenCalledOnce();
+  });
+
+  it('reuses existing sim session for same (group, judge)', async () => {
+    const gateway = makeFullGateway();
+    const { db, insertSpies } = makeOrganizerScoreDb({
+      whereResults: [
+        [
+          {
+            id: 'comp_sim',
+            status: 'active',
+            soloMode: false,
+            isSimulation: true,
+            cypherGroupCount: 2,
+            cypherJudgeCount: 3,
+          },
+        ],
+        [{ id: 'competitor_1' }],
+        [{ id: 'sim_session_existing' }], // existing sim session FOUND
+        [], // idempotency
+        [{ id: 'c_flow', name: 'Flow', minScore: '0.00', maxScore: '10.00' }],
+        [{ maxSeq: 5 }],
+      ],
+    });
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_1',
+    ).tournament.submitOrganizerScore(SIM_INPUT);
+    expect(result).toMatchObject({ success: true });
+    // Only 2 inserts: scores + events (no new judge session)
+    expect(insertSpies).toHaveLength(2);
+    const scoreInsertArgs = (insertSpies[0]!.values as ReturnType<typeof vi.fn>)
+      .mock.calls[0]?.[0];
+    expect(scoreInsertArgs).toMatchObject({
+      judgeSessionId: 'sim_session_existing',
+    });
+  });
+
+  it('idempotent retry returns idempotent=true without new inserts', async () => {
+    const { db, insertSpies } = makeOrganizerScoreDb({
+      whereResults: [
+        [
+          {
+            id: 'comp_sim',
+            status: 'active',
+            soloMode: false,
+            isSimulation: true,
+            cypherGroupCount: 2,
+            cypherJudgeCount: 3,
+          },
+        ],
+        [{ id: 'competitor_1' }],
+        [{ id: 'sim_session_existing' }],
+        [{ id: 'score_already_there' }], // idempotency hit
+      ],
+    });
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.submitOrganizerScore(SIM_INPUT);
+    expect(result).toMatchObject({ success: true, idempotent: true });
+    expect(insertSpies).toHaveLength(0);
+  });
+
+  it('creates distinct sessions for (G0,J0) and (G0,J1) — same group, different judges', async () => {
+    const gateway = makeFullGateway();
+    const { db, insertSpies } = makeOrganizerScoreDb({
+      whereResults: [
+        [
+          {
+            id: 'comp_sim',
+            status: 'active',
+            soloMode: false,
+            isSimulation: true,
+            cypherGroupCount: 2,
+            cypherJudgeCount: 3,
+          },
+        ],
+        [{ id: 'competitor_1' }],
+        [], // no session found for (G0, J1)
+        [], // idempotency miss
+        [{ id: 'c_flow', name: 'Flow', minScore: '0.00', maxScore: '10.00' }],
+        [{ maxSeq: 10 }],
+      ],
+      insertReturning: [{ id: 'sim_session_a2' }],
+    });
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_1',
+    ).tournament.submitOrganizerScore({
+      competitionId: 'comp_sim',
+      competitorId: 'competitor_1',
+      scores: [{ criterionId: 'c_flow', value: '7.50' }],
+      idempotencyKey: 'sim-idem-distinct',
+      simulatedGroupIndex: 0,
+      simulatedJudgeIndex: 1, // J1 — distinct from J0 in SIM_INPUT
+    });
+    expect(result).toMatchObject({ success: true, idempotent: false });
+    const sessionArgs = (insertSpies[0]!.values as ReturnType<typeof vi.fn>)
+      .mock.calls[0]?.[0];
+    expect(sessionArgs).toMatchObject({
+      label: 'Sim Judge GA-J2',
+      groupIndex: 0,
+      createdBy: 'user_1',
+    });
+    const scoreArgs = (insertSpies[1]!.values as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0];
+    expect(scoreArgs).toMatchObject({ judgeSessionId: 'sim_session_a2' });
+  });
+});
+
+describe('tournament.submitOrganizerVote (simulation mode)', () => {
+  const VOTE_INPUT = {
+    competitionId: 'comp_sim',
+    matchupId: 'm_1',
+    vote: 'player1' as const,
+    idempotencyKey: 'vote-idem-1',
+    simulatedJudgeIndex: 1,
+  };
+
+  it('rejects unauthenticated callers', async () => {
+    await expect(
+      caller(null).tournament.submitOrganizerVote(VOTE_INPUT),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('Zod rejects simulatedJudgeIndex out of range', async () => {
+    await expect(
+      caller('user_1').tournament.submitOrganizerVote({
+        ...VOTE_INPUT,
+        simulatedJudgeIndex: 32,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('rejects with SIMULATION_JUDGE_INDEX_OUT_OF_RANGE when judge >= battlesJudgeCount', async () => {
+    let idx = 0;
+    const results: unknown[][] = [
+      [
+        {
+          id: 'comp_sim',
+          status: 'active',
+          soloMode: false,
+          isSimulation: true,
+          battlesJudgeCount: 1,
+          cypherCompletedAt: new Date(),
+        },
+      ],
+    ];
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockImplementation(() => Promise.resolve(results[idx++] ?? [])),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.submitOrganizerVote({
+        ...VOTE_INPUT,
+        simulatedJudgeIndex: 1,
+      })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_JUDGE_INDEX_OUT_OF_RANGE',
+    });
+  });
+
+  it('happy path: creates Sim Judge BAT-J2 session and records vote', async () => {
+    const gateway = makeFullGateway();
+    let selectIdx = 0;
+    const selectResults: unknown[][] = [
+      [
+        {
+          id: 'comp_sim',
+          status: 'active',
+          soloMode: false,
+          isSimulation: true,
+          battlesJudgeCount: 3,
+          cypherCompletedAt: new Date(),
+        },
+      ],
+      [], // resolveOrganizerJudgeSession: no existing BAT-J2 session
+      [], // idempotency miss
+      [
+        {
+          id: 'm_1',
+          competitionId: 'comp_sim',
+          isBye: false,
+          winnerCompetitorId: null,
+        },
+      ],
+      [{ maxSeq: 4 }],
+    ];
+    const insertSpies: Array<{ values: ReturnType<typeof vi.fn> }> = [];
+    let insertCount = 0;
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(selectResults[selectIdx++] ?? []),
+        ),
+      insert: vi.fn(() => {
+        const idx = insertCount++;
+        const valuesSpy = vi.fn(() => {
+          if (idx === 0) {
+            return {
+              returning: vi.fn().mockResolvedValue([{ id: 'bat_j2_id' }]),
+            };
+          }
+          return Promise.resolve([]);
+        });
+        insertSpies.push({ values: valuesSpy });
+        return { values: valuesSpy };
+      }),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_1',
+    ).tournament.submitOrganizerVote({
+      ...VOTE_INPUT,
+      simulatedJudgeIndex: 1, // Judge 2 (0-indexed)
+    });
+    expect(result).toMatchObject({ success: true, idempotent: false });
+    expect(insertSpies).toHaveLength(3); // session + vote + event
+    const sessionArgs = (insertSpies[0]!.values as ReturnType<typeof vi.fn>)
+      .mock.calls[0]?.[0];
+    expect(sessionArgs).toMatchObject({
+      label: 'Sim Judge BAT-J2',
+      createdBy: 'user_1',
+    });
+    const voteArgs = (insertSpies[1]!.values as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0];
+    expect(voteArgs).toMatchObject({
+      judgeSessionId: 'bat_j2_id',
+      vote: 'player1',
+    });
+    expect(gateway.broadcastVoteSubmitted).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('tournament.startCypherPhase (simulation mode pre-creates sim sessions)', () => {
+  function makeStartCypherSimDb(judgeSessionCount: number) {
+    let callIdx = 0;
+    let lateLoadedSessions: unknown[] | null = null;
+    const responses: unknown[][] = [
+      [
+        {
+          id: 'comp_sim',
+          status: 'draft',
+          cypherGroupCount: 2,
+          cypherJudgeCount: 3,
+          soloMode: false,
+          isSimulation: true,
+        },
+      ],
+      [{ id: 'crit_1' }], // criteria
+      [{ id: 'competitor_1' }, { id: 'competitor_2' }], // competitors
+      Array.from({ length: judgeSessionCount }, (_, i) => ({
+        id: `existing_session_${i}`,
+      })),
+    ];
+    const insertSpies: Array<{
+      table: string;
+      values: ReturnType<typeof vi.fn>;
+    }> = [];
+    let insertCount = 0;
+    const txMock: any = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi.fn().mockImplementation(() => {
+        const result =
+          lateLoadedSessions !== null && callIdx === 3
+            ? lateLoadedSessions
+            : (responses[callIdx++] ?? []);
+        return makeChainable(result);
+      }),
+      update: vi.fn(() => ({
+        set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      })),
+      insert: vi.fn(() => {
+        const idx = insertCount++;
+        const valuesSpy = vi.fn((rows: unknown) => {
+          // First insert (idx 0) is the sim sessions bulk INSERT.
+          if (idx === 0) {
+            const created = (rows as { competitionId: string }[]).map(
+              (_, i) => ({ id: `sim_${i}` }),
+            );
+            // Subsequent re-load returns these new sessions.
+            lateLoadedSessions = created;
+            // Reset callIdx so the next where() call after re-load returns lateLoadedSessions.
+            callIdx = 3;
+            return Promise.resolve([]);
+          }
+          return Promise.resolve([]);
+        });
+        insertSpies.push({ table: `insert_${idx}`, values: valuesSpy });
+        return { values: valuesSpy };
+      }),
+    };
+    return {
+      db: {
+        db: {
+          transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+        },
+      } as any,
+      insertSpies,
+    };
+  }
+
+  it('auto-creates 6 sim sessions (2 groups × 3 judges) when none exist', async () => {
+    const gateway = makeFullGateway();
+    const { db, insertSpies } = makeStartCypherSimDb(0);
+    await makeCallerFor(db, gateway, 'user_1').tournament.startCypherPhase({
+      competitionId: 'comp_sim',
+    });
+    const sessionInsert = insertSpies[0]!;
+    const insertedRows = (sessionInsert.values as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Array<{ label: string; groupIndex: number }>;
+    expect(insertedRows).toHaveLength(6);
+    expect(insertedRows.map((r) => r.label)).toEqual([
+      'Sim Judge GA-J1',
+      'Sim Judge GB-J1',
+      'Sim Judge GA-J2',
+      'Sim Judge GB-J2',
+      'Sim Judge GA-J3',
+      'Sim Judge GB-J3',
+    ]);
+    expect(insertedRows.map((r) => r.groupIndex)).toEqual([0, 1, 0, 1, 0, 1]);
+  });
+});
+
+describe('tournament.startCypherPhase live mode regression', () => {
+  it('still throws INSUFFICIENT_JUDGE_LINKS for non-sim non-solo with 0 sessions', async () => {
+    let callIdx = 0;
+    const responses: unknown[][] = [
+      [
+        {
+          id: 'comp_live',
+          status: 'draft',
+          cypherGroupCount: 2,
+          cypherJudgeCount: 3,
+          soloMode: false,
+          isSimulation: false,
+        },
+      ],
+      [{ id: 'crit_1' }],
+      [{ id: 'competitor_1' }],
+      [], // 0 judge sessions
+    ];
+    const txMock: any = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      innerJoin: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockImplementation(() => makeChainable(responses[callIdx++] ?? [])),
+      update: vi.fn(() => ({
+        set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      })),
+      insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue([]) })),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.startCypherPhase({ competitionId: 'comp_live' })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'INSUFFICIENT_JUDGE_LINKS',
+    });
+  });
+});
+
+describe('tournament.listSimulatedJudgeSessions', () => {
+  it('rejects unauthenticated callers', async () => {
+    await expect(
+      caller(null).tournament.listSimulatedJudgeSessions({
+        competitionId: 'comp_sim',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('returns NOT_FOUND for unknown competition', async () => {
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([]),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    await expect(
+      makeCallerFor(
+        db,
+        makeFullGateway(),
+        'user_1',
+      ).tournament.listSimulatedJudgeSessions({
+        competitionId: 'unknown',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('rejects non-simulation competition with SIMULATION_NOT_ENABLED', async () => {
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockResolvedValue([{ id: 'comp_live', isSimulation: false }]),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.listSimulatedJudgeSessions({ competitionId: 'comp_live' })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_NOT_ENABLED',
+    });
+  });
+
+  it('returns sim sessions ordered by label', async () => {
+    let idx = 0;
+    const results: unknown[][] = [[{ id: 'comp_sim', isSimulation: true }]];
+    const sessions = [
+      { id: 's1', label: 'Sim Judge GA-J1', groupIndex: 0 },
+      { id: 's2', label: 'Sim Judge GB-J1', groupIndex: 1 },
+    ];
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockImplementation(() => {
+        if (idx < results.length) {
+          return Promise.resolve(results[idx++] ?? []);
+        }
+        return makeChainable(sessions);
+      }),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.listSimulatedJudgeSessions({ competitionId: 'comp_sim' });
+    expect(result).toHaveLength(2);
+    expect(result[0]?.label).toBe('Sim Judge GA-J1');
+  });
+});
+
+describe('tournament.setSoloMode (Story 7.2 simulation guard)', () => {
+  it('rejects soloMode toggle on a simulation competition', async () => {
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'comp_sim', status: 'draft', isSimulation: true },
+        ]),
+      update: vi.fn(() => ({
+        set: vi
+          .fn()
+          .mockReturnValue({
+            where: vi
+              .fn()
+              .mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }),
+          }),
+      })),
+    };
+    const db = {
+      db: {
+        transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+      },
+    } as any;
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.setSoloMode({ competitionId: 'comp_sim', soloMode: true })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_NOT_ENABLED',
+    });
+  });
+});
+
+// ─── Story 7.3: Simulation Reset & Judge Training Access ───────────────────
+
+describe('tournament.resetSimulation', () => {
+  function makeResetDb(opts: {
+    whereResults: unknown[][];
+    deleteResults: unknown[][];
+    insertEventThrows?: unknown;
+  }) {
+    let whereIdx = 0;
+    let deleteIdx = 0;
+    const insertSpies: Array<{ values: ReturnType<typeof vi.fn> }> = [];
+    let insertCount = 0;
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockImplementation(() =>
+          makeChainable(opts.whereResults[whereIdx++] ?? []),
+        ),
+      delete: vi.fn(() => ({
+        where: vi.fn(() => ({
+          returning: vi
+            .fn()
+            .mockResolvedValue(opts.deleteResults[deleteIdx++] ?? []),
+        })),
+      })),
+      update: vi.fn(() => ({
+        set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
+      })),
+      insert: vi.fn(() => {
+        const idx = insertCount++;
+        const valuesSpy = vi.fn(() => {
+          if (idx === 0 && opts.insertEventThrows) {
+            return Promise.reject(opts.insertEventThrows);
+          }
+          return Promise.resolve([]);
+        });
+        insertSpies.push({ values: valuesSpy });
+        return { values: valuesSpy };
+      }),
+    };
+    return {
+      db: {
+        db: {
+          transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)),
+        },
+      } as any,
+      txMock,
+      insertSpies,
+    };
+  }
+
+  it('rejects unauthenticated callers', async () => {
+    await expect(
+      caller(null).tournament.resetSimulation({ competitionId: 'comp_sim' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('returns NOT_FOUND for unknown competition', async () => {
+    const { db } = makeResetDb({ whereResults: [[]], deleteResults: [] });
+    await expect(
+      makeCallerFor(db, makeFullGateway(), 'user_1').tournament.resetSimulation(
+        {
+          competitionId: 'unknown',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('rejects non-simulation competitions with SIMULATION_NOT_ENABLED', async () => {
+    const { db } = makeResetDb({
+      whereResults: [
+        [{ id: 'comp_live', isSimulation: false, status: 'active' }],
+      ],
+      deleteResults: [],
+    });
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.resetSimulation({ competitionId: 'comp_live' })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_NOT_ENABLED',
+    });
+  });
+
+  it('happy path mid-cypher: deletes scores + assignments, updates status, appends event, broadcasts', async () => {
+    const gateway = makeFullGateway();
+    const { db, insertSpies, txMock } = makeResetDb({
+      whereResults: [
+        [{ id: 'comp_sim', isSimulation: true, status: 'active' }],
+        [{ maxSeq: 12 }], // max event sequence
+      ],
+      deleteResults: [
+        [], // votes
+        [{ id: 's1' }, { id: 's2' }, { id: 's3' }, { id: 's4' }, { id: 's5' }], // 5 scores
+        [], // matchups
+        [{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }, { id: 'a4' }], // 4 assignments
+      ],
+    });
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_1',
+    ).tournament.resetSimulation({
+      competitionId: 'comp_sim',
+    });
+    expect(result).toMatchObject({
+      competitionId: 'comp_sim',
+      scoresDeleted: 5,
+      votesDeleted: 0,
+      matchupsDeleted: 0,
+      groupAssignmentsDeleted: 4,
+    });
+    expect(typeof result.resetAt).toBe('string');
+    // Update was called.
+    expect(txMock.update).toHaveBeenCalled();
+    // Event was inserted.
+    expect(insertSpies).toHaveLength(1);
+    const eventArgs = (insertSpies[0]!.values as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0];
+    expect(eventArgs).toMatchObject({
+      type: 'simulation.reset',
+      aggregateId: 'comp_sim',
+      aggregateType: 'competition',
+      sequence: 13,
+      createdBy: 'user_1',
+    });
+    expect(gateway.broadcastSimulationReset).toHaveBeenCalledWith(
+      'comp_sim',
+      expect.objectContaining({
+        scoresDeleted: 5,
+        groupAssignmentsDeleted: 4,
+      }),
+    );
+  });
+
+  it('happy path mid-battles: deletes votes + matchups too', async () => {
+    const gateway = makeFullGateway();
+    const { db } = makeResetDb({
+      whereResults: [
+        [{ id: 'comp_sim', isSimulation: true, status: 'active' }],
+        [{ maxSeq: 50 }],
+      ],
+      deleteResults: [
+        [{ id: 'v1' }, { id: 'v2' }, { id: 'v3' }], // 3 votes
+        Array.from({ length: 16 }, (_, i) => ({ id: `s${i}` })), // 16 scores
+        [{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }, { id: 'm4' }], // 4 matchups
+        [
+          { id: 'a1' },
+          { id: 'a2' },
+          { id: 'a3' },
+          { id: 'a4' },
+          { id: 'a5' },
+          { id: 'a6' },
+          { id: 'a7' },
+          { id: 'a8' },
+        ],
+      ],
+    });
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_1',
+    ).tournament.resetSimulation({
+      competitionId: 'comp_sim',
+    });
+    expect(result).toMatchObject({
+      scoresDeleted: 16,
+      votesDeleted: 3,
+      matchupsDeleted: 4,
+      groupAssignmentsDeleted: 8,
+    });
+  });
+
+  it('idempotent on draft simulation: zero counts, event still appended', async () => {
+    const gateway = makeFullGateway();
+    const { db, insertSpies } = makeResetDb({
+      whereResults: [
+        [{ id: 'comp_sim', isSimulation: true, status: 'draft' }],
+        [{ maxSeq: 0 }],
+      ],
+      deleteResults: [[], [], [], []],
+    });
+    const result = await makeCallerFor(
+      db,
+      gateway,
+      'user_1',
+    ).tournament.resetSimulation({
+      competitionId: 'comp_sim',
+    });
+    expect(result).toMatchObject({
+      scoresDeleted: 0,
+      votesDeleted: 0,
+      matchupsDeleted: 0,
+      groupAssignmentsDeleted: 0,
+    });
+    // Event still appended (audit trail).
+    expect(insertSpies).toHaveLength(1);
+    expect(gateway.broadcastSimulationReset).toHaveBeenCalledOnce();
+  });
+
+  it('uses advisory lock keyed on competitionId', async () => {
+    const { db, txMock } = makeResetDb({
+      whereResults: [
+        [{ id: 'comp_sim', isSimulation: true, status: 'draft' }],
+        [{ maxSeq: 0 }],
+      ],
+      deleteResults: [[], [], [], []],
+    });
+    await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.resetSimulation({
+      competitionId: 'comp_sim',
+    });
+    // Second execute() call (after RLS) is the advisory lock.
+    const executeCalls = (txMock.execute as ReturnType<typeof vi.fn>).mock
+      .calls;
+    const advisoryLockCall = executeCalls.find((args) => {
+      const sqlChunks = args[0]?.queryChunks;
+      return JSON.stringify(sqlChunks ?? '').includes('pg_advisory_xact_lock');
+    });
+    expect(advisoryLockCall).toBeDefined();
+  });
+
+  it('maps unique-violation on event insert to INTERNAL_SERVER_ERROR', async () => {
+    const { db } = makeResetDb({
+      whereResults: [
+        [{ id: 'comp_sim', isSimulation: true, status: 'draft' }],
+        [{ maxSeq: 0 }],
+      ],
+      deleteResults: [[], [], [], []],
+      insertEventThrows: { code: '23505' },
+    });
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.resetSimulation({ competitionId: 'comp_sim' })
+      .catch((e: TRPCError) => e);
+    expect(err).toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+  });
+});
+
+describe('tournament.validateJudgeToken (Story 7.3 — isSimulation flag)', () => {
+  it('returns isSimulation: true for a simulation competition', async () => {
+    const dbMock = {
+      db: {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(),
+      },
+    } as any;
+    let callIdx = 0;
+    const responses: unknown[][] = [
+      [{ id: 'session_1', competitionId: 'comp_sim', label: 'Judge 1' }],
+      [
+        {
+          id: 'comp_sim',
+          name: 'Test Sim',
+          status: 'active',
+          cypherCompletedAt: null,
+          isSimulation: true,
+        },
+      ],
+    ];
+    dbMock.db.where = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(responses[callIdx++] ?? []));
+    const result = await makeCallerFor(
+      dbMock,
+      makeFullGateway(),
+      null,
+    ).tournament.validateJudgeToken({ token: 't_sim' });
+    expect(result.isSimulation).toBe(true);
+  });
+
+  it('returns isSimulation: false for a live competition', async () => {
+    const dbMock = {
+      db: {
+        select: vi.fn().mockReturnThis(),
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn(),
+      },
+    } as any;
+    let callIdx = 0;
+    const responses: unknown[][] = [
+      [{ id: 'session_2', competitionId: 'comp_live', label: 'Judge 1' }],
+      [
+        {
+          id: 'comp_live',
+          name: 'Live Comp',
+          status: 'active',
+          cypherCompletedAt: null,
+          isSimulation: false,
+        },
+      ],
+    ];
+    dbMock.db.where = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(responses[callIdx++] ?? []));
+    const result = await makeCallerFor(
+      dbMock,
+      makeFullGateway(),
+      null,
+    ).tournament.validateJudgeToken({ token: 't_live' });
+    expect(result.isSimulation).toBe(false);
+  });
+});
+
+describe('tournament.listSimulationResetEvents', () => {
+  it('rejects unauthenticated callers', async () => {
+    await expect(
+      caller(null).tournament.listSimulationResetEvents({ competitionId: 'c' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('returns NOT_FOUND for unknown competition', async () => {
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockResolvedValue([]),
+    };
+    const db = {
+      db: { transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)) },
+    } as any;
+    await expect(
+      makeCallerFor(
+        db,
+        makeFullGateway(),
+        'user_1',
+      ).tournament.listSimulationResetEvents({ competitionId: 'unknown' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('rejects non-simulation with SIMULATION_NOT_ENABLED', async () => {
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi
+        .fn()
+        .mockResolvedValue([{ id: 'comp_live', isSimulation: false }]),
+    };
+    const db = {
+      db: { transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)) },
+    } as any;
+    const err = await makeCallerFor(db, makeFullGateway(), 'user_1')
+      .tournament.listSimulationResetEvents({ competitionId: 'comp_live' })
+      .catch((e: TRPCError) => e);
+    expect((err as { cause?: unknown }).cause).toMatchObject({
+      errorCode: 'SIMULATION_NOT_ENABLED',
+    });
+  });
+
+  it('returns reset events newest-first with payload spread', async () => {
+    let idx = 0;
+    const ts1 = new Date('2026-05-09T10:00:00Z');
+    const ts2 = new Date('2026-05-09T11:00:00Z');
+    const results: unknown[][] = [[{ id: 'comp_sim', isSimulation: true }]];
+    const eventRows = [
+      {
+        payload: {
+          competitionId: 'comp_sim',
+          resetAt: ts2.toISOString(),
+          scoresDeleted: 10,
+          votesDeleted: 5,
+          matchupsDeleted: 2,
+          groupAssignmentsDeleted: 4,
+        },
+        createdAt: ts2,
+      },
+      {
+        payload: {
+          competitionId: 'comp_sim',
+          resetAt: ts1.toISOString(),
+          scoresDeleted: 5,
+          votesDeleted: 0,
+          matchupsDeleted: 0,
+          groupAssignmentsDeleted: 4,
+        },
+        createdAt: ts1,
+      },
+    ];
+    const txMock = {
+      execute: vi.fn().mockResolvedValue(undefined),
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockImplementation(() => {
+        if (idx < results.length) {
+          return Promise.resolve(results[idx++] ?? []);
+        }
+        return makeChainable(eventRows);
+      }),
+    };
+    const db = {
+      db: { transaction: vi.fn((cb: (tx: unknown) => unknown) => cb(txMock)) },
+    } as any;
+    const result = await makeCallerFor(
+      db,
+      makeFullGateway(),
+      'user_1',
+    ).tournament.listSimulationResetEvents({ competitionId: 'comp_sim' });
+    expect(result).toHaveLength(2);
+    expect(result[0]?.scoresDeleted).toBe(10);
+    expect(result[0]?.createdAt).toBe(ts2.toISOString());
   });
 });

@@ -112,6 +112,12 @@ export default function JudgePage() {
     onCompetitionCompleted: () => {
       void utils.tournament.getBattlesAssignment.invalidate({ token });
     },
+    onSimulationReset: () => {
+      void utils.tournament.validateJudgeToken.invalidate({ token });
+      void utils.tournament.getJudgeAssignments.invalidate({ token });
+      void utils.tournament.getBattlesAssignment.invalidate({ token });
+      setLocalScoredIds([]);
+    },
     onStatusChange: setConnectionStatus,
   });
 
@@ -179,6 +185,14 @@ export default function JudgePage() {
 
   const ConnectionDot = (
     <div className="fixed top-3 right-3 flex items-center gap-2 z-10">
+      {tokenData?.isSimulation && (
+        <span
+          data-testid="practice-mode-badge"
+          className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
+        >
+          PRACTICE MODE
+        </span>
+      )}
       <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[connectionStatus]}`} />
       <span className="text-xs text-muted-foreground">
         {connectionStatus === 'connected' ? 'Online' : connectionStatus}

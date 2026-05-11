@@ -14,6 +14,7 @@ import type {
   VoteSubmittedPayload,
 } from './scoring-events';
 import type { CompetitorWithdrawnPayload, CompetitorRescuedPayload } from './competitor-events';
+import type { SimulationResetPayload } from './simulation-events';
 import type { StandingsEntry } from '../types/standings.types';
 import type { JudgeLiveStatus } from '../types/judge-live-status';
 
@@ -33,6 +34,7 @@ export interface ServerToClientEvents {
   'judge.status-changed': (data: JudgeLiveStatus) => void;
   'competitor.withdrawn': (data: CompetitorWithdrawnPayload) => void;
   'competitor.rescued': (data: CompetitorRescuedPayload) => void;
+  'simulation.reset': (data: SimulationResetPayload) => void;
   error: (data: { code: string; message: string }) => void;
 }
 

@@ -12,6 +12,7 @@ import type {
   VoteSubmittedPayload,
   CompetitorWithdrawnPayload,
   CompetitorRescuedPayload,
+  SimulationResetPayload,
   StandingsEntry,
   JudgeLiveStatus,
 } from '@competition-platform/shared';
@@ -76,6 +77,10 @@ export interface ICompetitionGateway {
   broadcastCompetitorRescued(
     competitionId: string,
     payload: CompetitorRescuedPayload,
+  ): void;
+  broadcastSimulationReset(
+    competitionId: string,
+    payload: SimulationResetPayload,
   ): void;
   getJudgePresence(competitionId: string): JudgeLiveStatus[];
   clearPresence(competitionId: string): void;

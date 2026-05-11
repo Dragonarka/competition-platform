@@ -45,6 +45,8 @@ export const submitOrganizerScoreSchema = z.object({
   competitorId: z.string().min(1, 'Competitor ID is required'),
   scores: z.array(criterionScoreSchema).min(1, 'At least one criterion score is required'),
   idempotencyKey: z.string().min(1, 'Idempotency key is required'),
+  simulatedGroupIndex: z.number().int().min(0).max(25).optional(),
+  simulatedJudgeIndex: z.number().int().min(0).max(31).optional(),
 });
 
 export type SubmitOrganizerScoreInput = z.infer<typeof submitOrganizerScoreSchema>;
@@ -66,6 +68,7 @@ export const submitOrganizerVoteSchema = z.object({
   matchupId: z.string().min(1, 'Matchup ID is required'),
   vote: z.enum(VOTE_CHOICES),
   idempotencyKey: z.string().min(1, 'Idempotency key is required'),
+  simulatedJudgeIndex: z.number().int().min(0).max(31).optional(),
 });
 
 export type SubmitOrganizerVoteInput = z.infer<typeof submitOrganizerVoteSchema>;

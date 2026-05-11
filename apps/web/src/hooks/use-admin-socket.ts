@@ -9,6 +9,7 @@ import type {
   ScoreOverriddenPayload,
   CompetitorWithdrawnPayload,
   CompetitorRescuedPayload,
+  SimulationResetPayload,
   StandingsEntry,
   JudgeLiveStatus,
   PhaseTransitionedPayload,
@@ -40,6 +41,7 @@ interface UseAdminSocketOptions {
   onCompetitionCompleted?: (p: CompetitionCompletedPayload) => void;
   onCompetitorWithdrawn?: (p: CompetitorWithdrawnPayload) => void;
   onCompetitorRescued?: (p: CompetitorRescuedPayload) => void;
+  onSimulationReset?: (p: SimulationResetPayload) => void;
   onStatusChange?: (status: 'connected' | 'reconnecting' | 'disconnected') => void;
   onError?: (err: { code: string; message: string }) => void;
 }
@@ -129,6 +131,10 @@ export function useAdminSocket(opts: UseAdminSocketOptions) {
 
     socket.on('competitor.rescued', (p) => {
       optsRef.current.onCompetitorRescued?.(p);
+    });
+
+    socket.on('simulation.reset', (p) => {
+      optsRef.current.onSimulationReset?.(p);
     });
 
     socket.on('error', (err) => {

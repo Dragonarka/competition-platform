@@ -9,6 +9,7 @@ import type {
   CompetitionCompletedPayload,
   MatchupCompletedPayload,
   MatchupRevoteRequiredPayload,
+  SimulationResetPayload,
   VoteSubmittedPayload,
 } from '@competition-platform/shared';
 
@@ -25,6 +26,7 @@ interface UseJudgeSocketOptions {
   onMatchupRevoteRequired?: (payload: MatchupRevoteRequiredPayload) => void;
   onBracketAdvanced?: (payload: BracketAdvancedPayload) => void;
   onCompetitionCompleted?: (payload: CompetitionCompletedPayload) => void;
+  onSimulationReset?: (payload: SimulationResetPayload) => void;
   onStatusChange?: (status: 'connected' | 'reconnecting' | 'disconnected') => void;
 }
 
@@ -87,6 +89,10 @@ export function useJudgeSocket(opts: UseJudgeSocketOptions) {
 
     socket.on('competition.completed', (p) => {
       optsRef.current.onCompetitionCompleted?.(p);
+    });
+
+    socket.on('simulation.reset', (p) => {
+      optsRef.current.onSimulationReset?.(p);
     });
 
     // When the browser goes offline, Socket.IO will try to reconnect and emit

@@ -26,6 +26,7 @@ import type {
   VoteSubmittedPayload,
   CompetitorWithdrawnPayload,
   CompetitorRescuedPayload,
+  SimulationResetPayload,
   StandingsEntry,
   JudgeLiveStatus,
   ClientToServerEvents,
@@ -568,6 +569,32 @@ export class CompetitionGateway
     target.emit('bracket.advanced', payload);
     this.logger.log(
       `Broadcast bracket.advanced for ${competitionId} (round=${payload.roundNumber}, matchups=${payload.matchups.length}, admin + public + ${judgeRoomCount} judge room(s))`,
+    );
+  }
+
+  broadcastSimulationReset(
+    competitionId: string,
+    payload: SimulationResetPayload,
+  ): void {
+    // Admin + public + every per-judge room. Reset wipes run-state — every
+    // connected view (organizer admin, public spectators on standings/bracket
+    // pages, real judges practicing) must re-fetch fresh data.
+    const adminRoom = `competition:${competitionId}:admin`;
+    const publicRoom = `competition:${competitionId}:public`;
+    let target = this.server.to(adminRoom).to(publicRoom);
+    const judgeMap = this.judgePresence.get(competitionId);
+    let judgeRoomCount = 0;
+    if (judgeMap) {
+      for (const judgeSessionId of judgeMap.keys()) {
+        target = target.to(
+          `competition:${competitionId}:judge:${judgeSessionId}`,
+        );
+        judgeRoomCount++;
+      }
+    }
+    target.emit('simulation.reset', payload);
+    this.logger.log(
+      `Broadcast simulation.reset for ${competitionId} (scores=${payload.scoresDeleted}, votes=${payload.votesDeleted}, matchups=${payload.matchupsDeleted}, admin + public + ${judgeRoomCount} judge room(s))`,
     );
   }
 

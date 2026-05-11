@@ -89,11 +89,11 @@ development_status:
   epic-6-retrospective: done
 
   # ─── Epic 7: Simulation Mode & Judge Training ───
-  epic-7: in-progress
+  epic-7: done
   7-1-create-a-simulation-competition: done
-  7-2-organizer-runs-full-simulation-as-all-roles: backlog
-  7-3-simulation-reset-and-judge-training-access: backlog
-  epic-7-retrospective: optional
+  7-2-organizer-runs-full-simulation-as-all-roles: done
+  7-3-simulation-reset-and-judge-training-access: done
+  epic-7-retrospective: done
 
   # ─── Epic 8: Internationalization ───
   epic-8: backlog

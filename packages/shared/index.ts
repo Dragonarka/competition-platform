@@ -22,4 +22,6 @@ export * from './types/standings.types';
 export * from './types/judge-live-status';
 export * from './validation/competitor.schema';
 export * from './events/competitor-events';
+export * from './events/simulation-events';
+export * from './validation/simulation.schema';
 export * from './types/bracket.types';

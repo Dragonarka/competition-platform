@@ -9,6 +9,7 @@ import type {
   CompetitionCompletedPayload,
   MatchupCompletedPayload,
   PhaseTransitionedPayload,
+  SimulationResetPayload,
   StandingsEntry,
 } from '@competition-platform/shared';
 
@@ -22,6 +23,7 @@ interface UsePublicSocketOptions {
   onMatchupCompleted?: (payload: MatchupCompletedPayload) => void;
   onBracketAdvanced?: (payload: BracketAdvancedPayload) => void;
   onCompetitionCompleted?: (payload: CompetitionCompletedPayload) => void;
+  onSimulationReset?: (payload: SimulationResetPayload) => void;
 }
 
 export function usePublicSocket({
@@ -31,6 +33,7 @@ export function usePublicSocket({
   onMatchupCompleted,
   onBracketAdvanced,
   onCompetitionCompleted,
+  onSimulationReset,
 }: UsePublicSocketOptions) {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const standingsCallbackRef = useRef(onStandingsUpdated);
@@ -38,12 +41,14 @@ export function usePublicSocket({
   const matchupCompletedRef = useRef(onMatchupCompleted);
   const bracketAdvancedRef = useRef(onBracketAdvanced);
   const competitionCompletedRef = useRef(onCompetitionCompleted);
+  const simulationResetRef = useRef(onSimulationReset);
   useEffect(() => {
     standingsCallbackRef.current = onStandingsUpdated;
     phaseCallbackRef.current = onPhaseTransitioned;
     matchupCompletedRef.current = onMatchupCompleted;
     bracketAdvancedRef.current = onBracketAdvanced;
     competitionCompletedRef.current = onCompetitionCompleted;
+    simulationResetRef.current = onSimulationReset;
   });
 
   useEffect(() => {
@@ -78,6 +83,10 @@ export function usePublicSocket({
 
     socket.on('competition.completed', (payload) => {
       competitionCompletedRef.current?.(payload);
+    });
+
+    socket.on('simulation.reset', (payload) => {
+      simulationResetRef.current?.(payload);
     });
 
     return () => {
