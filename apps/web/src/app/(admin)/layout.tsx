@@ -9,8 +9,8 @@ const navItems = [
   { href: '/competitions', icon: Trophy, label: 'Competitions' },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { userId } = auth();
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const { userId } = await auth();
   if (!userId) {
     redirect('/sign-in');
   }
@@ -36,7 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between px-6 py-4 border-b border-border">
           <span className="font-semibold text-foreground">Competition Platform</span>
-          <UserButton afterSignOutUrl="/sign-in" />
+          <UserButton />
         </header>
         <main className="flex-1 p-6">{children}</main>
       </div>

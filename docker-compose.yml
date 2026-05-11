@@ -10,6 +10,20 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # Separate ephemeral Postgres for integration tests. Tmpfs storage means
+  # everything is wiped on container restart — no risk of polluting dev data.
+  postgres_test:
+    image: postgres:16-alpine
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_DB: competition_platform_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    tmpfs:
+      - /var/lib/postgresql/data
+    profiles: ['test']
+
   redis:
     image: redis:7-alpine
     ports:

@@ -1518,7 +1518,7 @@ export function createTournamentRouter(
             )
             .orderBy(desc(events.createdAt));
           return rows.map((r) => ({
-            ...(r.payload as unknown as SimulationResetPayload),
+            ...(r.payload as SimulationResetPayload),
             createdAt: r.createdAt.toISOString(),
           }));
         });

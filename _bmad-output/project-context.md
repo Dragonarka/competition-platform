@@ -1,7 +1,7 @@
 ---
 project_name: competition-platform
 user_name: Dragonarka
-date: 2026-04-24
+date: 2026-05-11
 sections_completed:
   - technology_stack
   - language_rules
@@ -10,8 +10,9 @@ sections_completed:
   - quality_rules
   - workflow_rules
   - anti_patterns
+  - recurring_patterns
 status: complete
-rule_count: 52
+rule_count: 60
 optimized_for_llm: true
 ---
 
@@ -157,6 +158,147 @@ _This file contains critical rules and patterns that AI agents MUST follow when 
 
 ---
 
+## Recurring Patterns (Lifted from Epic 5/6/7 Retros)
+
+These are patterns proven across multiple stories. When implementing a new procedure that touches the same surface, reach for these first.
+
+### Four-Layer Idempotency Stack (Mutations)
+
+Every event-producing mutation must defend against duplicate submission at four layers. Missing any layer creates a class of bugs that's hard to reproduce.
+
+1. **Client-supplied idempotency key.** Scoped by the natural ownership boundary (per judge session, per organizer). Composite UNIQUE index in Drizzle: `uniqueIndex('uq_x_y').on(table.scopeId, table.idempotencyKey)`.
+2. **Pre-insert SELECT on the idempotency key inside the same transaction.** Short-circuit with `{ success: true, idempotent: true }` if a row exists. Avoids unnecessary INSERT pressure on the index.
+3. **TRY/CATCH on the INSERT with `23505` → `TRPCError('CONFLICT')`.** Maps PostgreSQL unique-violation to a usable client error. Catches the race where two concurrent submits both pass step 2.
+4. **Sequence-collision retry for the event-store INSERT.** `events.sequence` is `(aggregate_id, aggregate_type)`-unique. On `23505`, re-read `max(sequence)` and retry (one shot is usually enough). See `submitScore`/`submitOrganizerScore` for the precedent. If you find yourself hand-rolling this for the third time, extract `insertEventOrRetry()`.
+
+### Socket-Event Checklist (Adding a New WS Event)
+
+When a new domain event needs broadcasting, ALL of these must change in lockstep:
+
+1. **Payload interface** in `packages/shared/events/<domain>-events.ts`.
+2. **Re-export** from `packages/shared/index.ts`.
+3. **`ServerToClientEvents`** in `packages/shared/events/socket-event-map.ts` — add the event key and payload type.
+4. **`ICompetitionGateway`** interface in `apps/api/src/modules/websocket/competition-gateway.interface.ts` — add the `broadcast<Event>` method signature.
+5. **`CompetitionGateway`** implementation — implement `broadcast<Event>`, choose room fanout (admin / public / per-judge — match the precedent of the closest existing broadcast).
+6. **`mockGateway` AND `makeFullGateway`** stubs in `tournament.router.spec.ts` — `vi.fn()` for the new method. Both must be updated, or typecheck fails.
+7. **Procedure call site** — collect the payload in a `let broadcastPayload` outside the transaction, broadcast AFTER `db.db.transaction(...)` resolves. Never broadcast inside the tx.
+8. **Per-hook listener** in `use-admin-socket.ts`, `use-judge-socket.ts`, `use-public-socket.ts` (as appropriate for the audience) — add `on<Event>?` option, register `socket.on(...)` inside the effect, forward to `optsRef.current.on<Event>?.(p)`.
+9. **Consumer invalidation** in each subscriber view — `void utils.tournament.<query>.invalidate(...)` for every query whose result depends on this event.
+
+If you're adding step 7 (procedure call site) without doing steps 1-6 first, you'll see a type error. That's intentional — the type system enforces the checklist.
+
+### SSR + Client-Island Pattern (Public Pages)
+
+Established in Story 6-1 and reused by 6-2/6-3. Use this for any public-facing page that needs:
+
+- Server-rendered initial HTML (SEO, first-paint speed).
+- Client-side reactivity (WebSocket updates, optimistic UI).
+
+Recipe:
+
+1. **Server component** (`page.tsx`) — calls `createServerTrpcClient()` (lives in `apps/web/src/lib/trpc-server.ts`), fetches initial data via the HTTP fallback path, passes it to the client island as a prop.
+2. **Client island** (`<XClientIsland initialData={data} />`) — `'use client'`, uses `useQuery({ initialData })` to hydrate the same tRPC procedure. TanStack Query treats `initialData` as cache-warm.
+3. **Socket subscription** — `usePublicSocket({ competitionId, onStandingsUpdated: (s) => utils.<query>.setData(...) })` for live updates.
+
+**Don't use `appRouter.createCaller()`** for SSR — it pulls the entire NestJS DI graph into the Next.js runtime and breaks bootstrap. HTTP fallback keeps the API runtime sealed inside `apps/api`.
+
+### Split-Component Pattern for Query-Data-Driven `useState`
+
+TanStack Query v5 removed `onSuccess`/`onError` from `useQuery`. When you need to initialize `useState` from query data, do NOT call `setState` in the render body — `react-hooks/set-state-in-effect` will lint-error, and even when it doesn't, React 19 will re-render unpredictably.
+
+The pattern:
+
+```tsx
+// OUTER: loader. Renders nothing useful until data arrives.
+export function MyComponent({ id }: { id: string }) {
+  const { data } = trpc.foo.useQuery({ id });
+  if (!data) return <Skeleton />;
+  // The `key` prop forces a fresh mount when `data.id` changes, so the inner
+  // component's `useState` re-initializes from props correctly.
+  return <MyComponentInner key={data.id} initialFoo={data.foo} />;
+}
+
+// INNER: pure render-from-props. `useState` initialized synchronously from
+// props — no effect, no setState-in-render.
+function MyComponentInner({ initialFoo }: { initialFoo: Foo }) {
+  const [foo, setFoo] = useState(initialFoo);
+  // ... rest of the component ...
+}
+```
+
+Story 7-1 H1 fix is the canonical example. Story 7-2's `SimulationClient` redirect-on-non-simulation uses the simpler variant: `useEffect(() => { if (shouldRedirect) router.replace(...) })` — never call `router.replace()` directly in render.
+
+### Helper-with-Mode Discriminator (Multi-Audience Procedures)
+
+Established in Story 7-2 with `resolveOrganizerJudgeSession({ mode: 'solo' | 'simulation-cypher' | 'simulation-battles', ... })`. Use when:
+
+- A single piece of logic must serve N modes that differ only in identity / lookup / labelling.
+- You want downstream code to be MODE-BLIND (the "no special branches" architectural rule from Epic 7).
+
+The helper takes a `mode` discriminator, derives the mode-specific parameters (labels, lock keys, lookup criteria) internally, and returns a uniform result. Call sites pass `mode` and get back a single shape. The procedure's tx flow past the helper call is identical across modes.
+
+**This is preferable to** boolean flags (`isSimulation?: boolean`) which proliferate at the call site and don't compose. The discriminated union is also self-documenting in IDE tooltips.
+
+### "Extract on Third Consumer" Discipline
+
+Don't extract a helper on the second use. Three consumers is the right trigger. Two cases:
+
+- Two uses might still diverge — extracting prematurely couples them.
+- One use is a one-off; two is a pattern; three is a rule.
+
+Precedents: `roundLabel` (Epic 6, extracted in 6-3 when presenter became the 3rd consumer), `resolveOrganizerJudgeSession` (Epic 7, extracted in 7-2 when simulation-cypher / simulation-battles / legacy-solo all needed find-or-create). Both extractions held without modification through their next story.
+
+### Inline Two-Step Confirm for Destructive Actions
+
+No modals during admin work — they block the flow (UX spec, Story 4-2 precedent). Pattern:
+
+```tsx
+const [confirming, setConfirming] = useState(false);
+// ... when not confirming: <Button onClick={() => setConfirming(true)}>Reset</Button>
+// ... when confirming: render a warning + <Button variant="destructive" onClick={mutate}>Confirm</Button>
+//                      + <Button variant="outline" onClick={() => setConfirming(false)}>Cancel</Button>
+```
+
+Examples: `score-override-form.tsx` (Story 4-2), `simulation-reset-panel.tsx` (Story 7-3).
+
+### `broadcastEnrichedStandings` Pattern (Post-Commit Side Effects)
+
+When a mutation must trigger a "recompute and broadcast derived state" after commit, use a dedicated helper (`broadcastEnrichedStandings`, etc.) rather than inlining the recompute at every call site. Story 6-1 H1 fix is the precedent — 5 broadcast sites were silently missing enrichment because the recompute was inlined and one call path forgot. The helper signature is:
+
+```typescript
+async function broadcastEnrichedStandings(
+  db: DatabaseService,
+  gateway: ICompetitionGateway,
+  competitionId: string,
+  triggeredBy: string, // for logging only
+): Promise<void>;
+```
+
+The "trigger source" parameter is for the gateway log line — useful in production debugging.
+
+### Real-DB Integration Test Triggers
+
+A test belongs in `apps/api/src/trpc/routers/__integration__/*.int.spec.ts` (not the regular `*.spec.ts`) when:
+
+- The procedure relies on RLS policy behaviour (`session.current_organizer_id`).
+- The procedure has TOCTOU guards (`23505` unique-violation retries, advisory locks).
+- A bug surfaced in production that the unit test missed — reproduce it as an integration test before fixing.
+- Cross-procedure state mutation is under test (e.g., `startCypherPhase` → `submitScore` → `completeCypherPhase`).
+
+Run with: `pnpm --filter @competition-platform/api test:integration`. See `apps/api/src/trpc/routers/__integration__/README.md`.
+
+### Reset / Destructive-Operation Semantics
+
+When a procedure destroys state, write the survival table BEFORE implementation:
+
+| Table | Action                          | Why |
+| ----- | ------------------------------- | --- |
+| ...   | KEEP / UPDATE / DELETE / APPEND | ... |
+
+This forces explicit decisions about edge cases (does this delete the audit trail? do real-user tokens survive?) before they bite. Story 7-3's spec is the canonical example.
+
+---
+
 ## Usage Guidelines
 
 **For AI Agents:**
@@ -174,4 +316,4 @@ _This file contains critical rules and patterns that AI agents MUST follow when 
 - Add rules here immediately when an adversarial review finds a pattern that applies beyond the specific story.
 - When technology stack changes (e.g., Next.js 17, TanStack Query 6), update this file BEFORE starting any story that would touch the changed surface.
 
-Last Updated: 2026-04-24
+Last Updated: 2026-05-11 (Epic 7 retro pattern lift — idempotency stack, socket-event checklist, SSR pattern, split-component pattern, helper-with-mode discriminator, third-consumer extraction rule, inline-confirm UX, broadcastEnrichedStandings pattern, real-DB integration test triggers, reset semantics)

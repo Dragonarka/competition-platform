@@ -7092,13 +7092,11 @@ describe('tournament.setSoloMode (Story 7.2 simulation guard)', () => {
           { id: 'comp_sim', status: 'draft', isSimulation: true },
         ]),
       update: vi.fn(() => ({
-        set: vi
-          .fn()
-          .mockReturnValue({
-            where: vi
-              .fn()
-              .mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }),
-          }),
+        set: vi.fn().mockReturnValue({
+          where: vi
+            .fn()
+            .mockReturnValue({ returning: vi.fn().mockResolvedValue([]) }),
+        }),
       })),
     };
     const db = {
