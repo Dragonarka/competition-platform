@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { useRouter } from '@/i18n/navigation';
 import { trpc } from '@/lib/trpc';
 import { createCompetitionSchema, createSimulationSchema } from '@competition-platform/shared';
 import { Button } from '@/components/ui/button';
@@ -9,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface FormCoreProps {
   isSimulation: boolean;
@@ -18,7 +21,13 @@ interface FormCoreProps {
 
 function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormCoreProps) {
   const router = useRouter();
-  const [name, setName] = useState(sourceName ? `${sourceName} (Simulation)` : '');
+  const t = useTranslations('Competitions.form');
+  const tCompetitions = useTranslations('Competitions');
+  const tCommon = useTranslations('Common');
+  const tErrors = useTranslations();
+  const [name, setName] = useState(
+    sourceName ? t('clonedNameDefault', { source: sourceName }) : '',
+  );
   const [date, setDate] = useState('');
   const [description, setDescription] = useState('');
   const [mockParticipantCount, setMockParticipantCount] = useState('24');
@@ -86,27 +95,27 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
     }
   }
 
+  const errorKey = getTrpcErrorI18nKey(activeMutation.error);
+
   return (
     <form onSubmit={handleSubmit}>
       <Card>
         <CardContent className="space-y-4">
           {isSimulation && sourceName && (
             <p className="text-sm text-muted-foreground">
-              Configuration will be cloned from {sourceName}
+              {t('cloneSourceHint', { source: sourceName })}
             </p>
           )}
 
           <div className="space-y-2">
             <Label htmlFor="name">
-              Name <span className="text-destructive">*</span>
+              {t('nameLabel')} <span className="text-destructive">*</span>
             </Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={
-                isSimulation ? 'e.g. Practice Session 01' : 'e.g. Summer Dance Battle 2026'
-              }
+              placeholder={isSimulation ? t('namePlaceholderSimulation') : t('namePlaceholder')}
               aria-invalid={!!errors.name}
               aria-describedby={errors.name ? 'name-error' : undefined}
             />
@@ -118,17 +127,17 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="date">Date</Label>
+            <Label htmlFor="date">{t('dateLabel')}</Label>
             <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">{t('descriptionLabel')}</Label>
             <Textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description of the competition"
+              placeholder={t('descriptionPlaceholder')}
               rows={3}
               aria-describedby={errors.description ? 'description-error' : undefined}
             />
@@ -141,7 +150,7 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
 
           {isSimulation && (
             <div className="space-y-2">
-              <Label htmlFor="mockParticipantCount">Mock Participants</Label>
+              <Label htmlFor="mockParticipantCount">{t('mockParticipantsLabel')}</Label>
               <Input
                 id="mockParticipantCount"
                 type="number"
@@ -152,10 +161,7 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
                 aria-invalid={!!errors.mockParticipantCount}
                 aria-describedby={errors.mockParticipantCount ? 'mock-count-error' : undefined}
               />
-              <p className="text-xs text-muted-foreground">
-                Auto-generates competitors named &ldquo;Competitor 01&rdquo; through
-                &ldquo;Competitor N&rdquo; (2–200)
-              </p>
+              <p className="text-xs text-muted-foreground">{t('mockParticipantsHint')}</p>
               {errors.mockParticipantCount && (
                 <p id="mock-count-error" className="text-sm text-destructive">
                   {errors.mockParticipantCount}
@@ -167,20 +173,22 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
 
         <CardFooter className="flex justify-end gap-3">
           <Button type="button" variant="ghost" onClick={() => router.back()}>
-            Cancel
+            {tCommon('cancel')}
           </Button>
           <Button type="submit" disabled={activeMutation.isPending}>
             {activeMutation.isPending
-              ? 'Creating...'
+              ? t('creating')
               : isSimulation
-                ? 'Create Simulation'
-                : 'Create Competition'}
+                ? tCompetitions('createSimulation')
+                : tCompetitions('create')}
           </Button>
         </CardFooter>
       </Card>
 
       {activeMutation.error && (
-        <p className="mt-4 text-sm text-destructive">{activeMutation.error.message}</p>
+        <p className="mt-4 text-sm text-destructive">
+          {errorKey ? tErrors(errorKey) : activeMutation.error.message}
+        </p>
       )}
     </form>
   );
@@ -188,6 +196,7 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
 
 export function CreateCompetitionForm() {
   const searchParams = useSearchParams();
+  const t = useTranslations('Competitions.form');
   const isSimulation = searchParams.get('simulation') === 'true';
   const sourceId = searchParams.get('source');
 
@@ -203,7 +212,7 @@ export function CreateCompetitionForm() {
       return (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            Loading source competition…
+            {t('loadingSource')}
           </CardContent>
         </Card>
       );

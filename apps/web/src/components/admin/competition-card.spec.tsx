@@ -1,7 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { Competition } from '@competition-platform/shared';
+
+vi.mock('@/i18n/navigation', () => ({
+  Link: (props: Record<string, unknown>) => createElement('a', props),
+}));
+
+vi.mock('next-intl', () => ({
+  useTranslations: (ns?: string) => (key: string) => (ns ? `${ns}.${key}` : key),
+  useFormatter: () => ({
+    dateTime: (date: Date) => date.toISOString(),
+  }),
+}));
+
 import { CompetitionCard } from './competition-card';
 
 interface RenderResult {
@@ -41,23 +53,23 @@ async function render(competition: Competition): Promise<RenderResult> {
 }
 
 describe('CompetitionCard', () => {
-  it('renders SIMULATION badge when isSimulation is true', async () => {
+  it('renders simulation badge key when isSimulation is true', async () => {
     const { container, unmount } = await render(makeCompetition({ isSimulation: true }));
-    expect(container.textContent).toContain('SIMULATION');
+    expect(container.textContent).toContain('Competitions.simulationBadge');
     unmount();
   });
 
-  it('does NOT render SIMULATION badge when isSimulation is false', async () => {
+  it('does NOT render simulation badge when isSimulation is false', async () => {
     const { container, unmount } = await render(makeCompetition({ isSimulation: false }));
-    expect(container.textContent).not.toContain('SIMULATION');
+    expect(container.textContent).not.toContain('Competitions.simulationBadge');
     unmount();
   });
 
-  it('renders both SIMULATION badge and status badge', async () => {
+  it('renders both simulation and status keys', async () => {
     const { container, unmount } = await render(
       makeCompetition({ isSimulation: true, status: 'active' }),
     );
-    expect(container.textContent).toContain('SIMULATION');
+    expect(container.textContent).toContain('Competitions.simulationBadge');
     expect(container.textContent).toContain('active');
     unmount();
   });

@@ -1,4 +1,7 @@
-import Link from 'next/link';
+'use client';
+
+import { useTranslations, useFormatter } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import type { Competition } from '@competition-platform/shared';
 
 const statusStyles: Record<Competition['status'], string> = {
@@ -9,6 +12,10 @@ const statusStyles: Record<Competition['status'], string> = {
 };
 
 export function CompetitionCard({ competition }: { competition: Competition }) {
+  const t = useTranslations('Competitions');
+  const tStatus = useTranslations('Competitions.status');
+  const format = useFormatter();
+
   return (
     <Link
       href={`/competitions/${competition.id}`}
@@ -19,13 +26,13 @@ export function CompetitionCard({ competition }: { competition: Competition }) {
         <div className="flex items-center gap-1.5">
           {competition.isSimulation && (
             <span className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
-              SIMULATION
+              {t('simulationBadge')}
             </span>
           )}
           <span
             className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${statusStyles[competition.status]}`}
           >
-            {competition.status}
+            {tStatus(competition.status)}
           </span>
         </div>
       </div>
@@ -33,8 +40,14 @@ export function CompetitionCard({ competition }: { competition: Competition }) {
         <p className="text-muted-foreground text-xs mb-2 line-clamp-2">{competition.description}</p>
       )}
       <div className="flex items-center gap-3 text-muted-foreground text-xs">
-        {competition.date && <span>{new Date(competition.date).toLocaleDateString()}</span>}
-        <span>Created {new Date(competition.createdAt).toLocaleDateString()}</span>
+        {competition.date && (
+          <span>{format.dateTime(new Date(competition.date), { dateStyle: 'medium' })}</span>
+        )}
+        <span>
+          {t('createdOn', {
+            date: format.dateTime(new Date(competition.createdAt), { dateStyle: 'medium' }),
+          })}
+        </span>
       </div>
     </Link>
   );

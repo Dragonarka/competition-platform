@@ -8,11 +8,372 @@
     "delete": "Delete",
     "edit": "Edit",
     "submit": "Submit",
-    "confirm": "Confirm"
+    "confirm": "Confirm",
+    "remove": "Remove",
+    "add": "Add",
+    "back": "Back",
+    "close": "Close",
+    "copy": "Copy",
+    "yes": "Yes",
+    "no": "No"
   },
   "App": {
     "title": "Competition Platform",
     "description": "Real-time WebSocket competition platform"
+  },
+  "AdminNav": {
+    "dashboard": "Dashboard",
+    "competitions": "Competitions"
+  },
+  "Competitions": {
+    "pageTitle": "Competitions",
+    "create": "Create Competition",
+    "createSimulation": "Create Simulation",
+    "newCompetition": "New Competition",
+    "newSimulation": "New Simulation",
+    "simulationBadge": "SIMULATION",
+    "createdOn": "Created {date}",
+    "status": {
+      "draft": "draft",
+      "active": "active",
+      "completed": "completed",
+      "archived": "archived"
+    },
+    "list": {
+      "emptyTitle": "No competitions yet",
+      "emptyHint": "Create your first competition to get started",
+      "emptyCta": "Create Your First Competition"
+    },
+    "form": {
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Summer Dance Battle 2026",
+      "namePlaceholderSimulation": "e.g. Practice Session 01",
+      "dateLabel": "Date",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "Optional description of the competition",
+      "mockParticipantsLabel": "Mock Participants",
+      "mockParticipantsHint": "Auto-generates competitors named “Competitor 01” through “Competitor N” (2–200)",
+      "creating": "Creating…",
+      "cloneSourceHint": "Configuration will be cloned from {source}",
+      "clonedNameDefault": "{source} (Simulation)",
+      "loadingSource": "Loading source competition…"
+    }
+  },
+  "Dashboard": {
+    "title": "My Competitions",
+    "loading": "Loading dashboard…",
+    "competitionNotFound": "Competition not found.",
+    "authLoading": "Loading…",
+    "authRequired": "Authentication required to view the live dashboard.",
+    "judgeStatus": "Judge Status",
+    "topStandings": "Top 10 Standings",
+    "recentScores": "Recent Scores",
+    "noScores": "No scores yet.",
+    "noJudges": "No judges assigned yet.",
+    "noRecentScores": "No scores submitted yet.",
+    "tableRank": "#",
+    "tableName": "Name",
+    "tableScore": "Score",
+    "byJudge": "by {judge}",
+    "liveStatusConnected": "Live",
+    "liveStatusReconnecting": "Reconnecting…",
+    "liveStatusDisconnected": "Offline",
+    "judgeConnected": "Connected",
+    "judgeDisconnected": "Disconnected",
+    "lastSeen": "Last seen: {time}",
+    "neverSeen": "Never",
+    "judgeGroup": "Group {n}",
+    "judgeScored": "{submitted}/{expected} scored",
+    "judgePending": "{n} pending",
+    "phase": "Phase",
+    "scoresKpi": "Scores",
+    "scoresKpiHint": "submitted / expected",
+    "judgesOnline": "Judges Online",
+    "judgesOnlineHint": "connected / total",
+    "liveUpdatesError": "Live updates unavailable: {message}",
+    "phaseLabels": {
+      "configuration": "Configuration",
+      "cypher": "Cypher — Scoring",
+      "cypher-review": "Cypher — Review",
+      "battles": "Battles",
+      "completed": "Completed"
+    }
+  },
+  "CompetitionConfig": {
+    "pageTitle": "Competition Configuration",
+    "tabs": {
+      "criteria": "Evaluation Criteria",
+      "participants": "Participants",
+      "competitors": "Competitors",
+      "judgeGroups": "Judge Groups",
+      "judgeLinks": "Judge Links"
+    }
+  },
+  "Criteria": {
+    "title": "Evaluation Criteria",
+    "loading": "Loading criteria…",
+    "empty": "No criteria defined yet.",
+    "nameLabel": "Criterion Name",
+    "namePlaceholder": "e.g. Musicality",
+    "minLabel": "Min Score",
+    "maxLabel": "Max Score",
+    "addCta": "Add Criterion",
+    "adding": "Adding…",
+    "minError": "Minimum must be less than maximum",
+    "copyTemplate": "Copy from Template",
+    "sourceCompetition": "Source Competition",
+    "selectPlaceholder": "Select a competition…",
+    "copyCta": "Copy Template",
+    "copying": "Copying…"
+  },
+  "Participants": {
+    "title": "Participants",
+    "formatTitle": "Participant Format",
+    "formatLabel": "Format",
+    "formatIndividual": "Individual",
+    "formatPairs": "Pairs",
+    "loading": "Loading participants…",
+    "empty": "No participants registered yet.",
+    "participantIdLabel": "Participant ID",
+    "participantIdPlaceholder": "e.g. MC-001",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. DJ Sample",
+    "addCta": "Add Participant",
+    "adding": "Adding…"
+  },
+  "JudgeGroups": {
+    "title": "Judge Groups",
+    "subtitle": "Configure how judges are organized across groups",
+    "soloLockedHint": "Solo mode is enabled — judge groups are locked at one group of one judge.",
+    "groupsLabel": "Number of Groups",
+    "judgesPerGroupLabel": "Judges per Group",
+    "advancementLabel": "Top scorers to advance",
+    "advancementHint": "Number of competitors that advance to battles",
+    "saveCta": "Save Judge Configuration",
+    "saving": "Saving…",
+    "saved": "Configuration saved.",
+    "totalJudges": "Total judges: {count}"
+  },
+  "JudgeLinks": {
+    "title": "Judge Links",
+    "subtitle": "Share these tokens with the people who will judge each group.",
+    "configMissing": "Configure judge groups first to generate links.",
+    "loading": "Loading judge links…",
+    "groupHeader": "Group {n}",
+    "copy": "Copy Link",
+    "copied": "Copied!",
+    "regenerate": "Regenerate",
+    "regenerating": "Regenerating…",
+    "regenerateConfirm": "Regenerating will invalidate any links you have already shared. Continue?"
+  },
+  "StartCypher": {
+    "title": "Start Cypher Phase",
+    "ready": "Everything looks good — ready to start scoring.",
+    "blocked": "Cannot start yet:",
+    "startCta": "Start Cypher Phase",
+    "starting": "Starting…",
+    "completedHint": "Cypher phase has already been started."
+  },
+  "CypherResults": {
+    "title": "Cypher Results — Advancement Review",
+    "loading": "Loading results…",
+    "noScores": "No scores yet.",
+    "rankHeader": "#",
+    "nameHeader": "Competitor",
+    "scoreHeader": "Score",
+    "statusHeader": "Status",
+    "advancingBadge": "Advances",
+    "eliminatedBadge": "Eliminated",
+    "advancePhaseCta": "Confirm & Start Battles",
+    "advancing": "Advancing…",
+    "downloadCsv": "Download CSV"
+  },
+  "Bracket": {
+    "title": "Bracket",
+    "loading": "Loading bracket…",
+    "notGenerated": "Bracket has not been generated yet.",
+    "byeLabel": "BYE",
+    "tbdLabel": "TBD",
+    "roundLabel": "Round {n}",
+    "winnerLabel": "Winner",
+    "championLabel": "🏆 Champion"
+  },
+  "BattlesVoting": {
+    "title": "Battles Voting",
+    "loading": "Loading battles…",
+    "noActive": "No active battles right now.",
+    "voteForA": "Vote {name}",
+    "voteForB": "Vote {name}",
+    "voteTie": "Tie",
+    "submitting": "Submitting…",
+    "resolved": "Resolved",
+    "revoteRequired": "Revote required",
+    "tieResolutionRequired": "Tie resolution required"
+  },
+  "TieResolution": {
+    "title": "Tie Resolution Required",
+    "subtitle": "Pick a winner and provide a reason. This entry is recorded in the audit trail.",
+    "winnerLabel": "Winner",
+    "reasonLabel": "Reason",
+    "reasonPlaceholder": "Explain the resolution",
+    "resolveCta": "Resolve Tie",
+    "resolving": "Resolving…"
+  },
+  "LiveDashboard": {
+    "linkLabel": "Open Live Dashboard",
+    "manageScores": "Manage Scores",
+    "errorTitle": "Live updates unavailable"
+  },
+  "Simulation": {
+    "openLink": "Open Simulation",
+    "configLink": "Simulate Configuration",
+    "banner": "PRACTICE MODE",
+    "subBanner": "All actions in this competition are simulated and isolated.",
+    "panels": {
+      "client": {
+        "title": "Simulation Console",
+        "subtitle": "Run a competition as any role — organizer, judge, or competitor — without affecting real data.",
+        "loading": "Loading simulation…"
+      },
+      "cypher": {
+        "title": "Cypher Scoring (as Judge)",
+        "judgeLabel": "Judge",
+        "competitorLabel": "Competitor",
+        "submitCta": "Submit Score",
+        "submitting": "Submitting…",
+        "queueHeader": "Queued Submissions",
+        "queueEmpty": "No submissions queued.",
+        "indexLabel": "Judge #{n}",
+        "validationOutOfRange": "Score outside allowed range",
+        "submitted": "Submitted"
+      },
+      "battles": {
+        "title": "Battles Voting (as Judge)",
+        "judgeLabel": "Judge",
+        "matchupHeader": "Matchup",
+        "voteCta": "Submit Vote"
+      },
+      "history": {
+        "title": "Recent Activity",
+        "subtitle": "Most recent events in this simulation.",
+        "empty": "No simulation events yet.",
+        "eventScore": "{judge} scored {competitor}",
+        "eventVote": "{judge} voted {choice}",
+        "eventReset": "Simulation reset",
+        "eventPhase": "Phase advanced to {phase}",
+        "timestamp": "{time}"
+      },
+      "reset": {
+        "title": "Reset Simulation",
+        "subtitle": "Discard all simulated scores and votes; bring the competition back to its configuration state.",
+        "resetCta": "Reset Simulation",
+        "resetting": "Resetting…",
+        "confirm": "Click again to confirm reset",
+        "lastReset": "Last reset: {time}",
+        "neverReset": "Never reset",
+        "errorTitle": "Reset failed"
+      }
+    }
+  },
+  "SoloScoring": {
+    "title": "Solo Scoring (Organizer)",
+    "subtitle": "Score directly as the organizer when running without judges.",
+    "enableToggle": "Enable solo scoring",
+    "lockedHint": "Solo mode is locked after the competition starts.",
+    "enabledStatus": "Solo mode is currently enabled.",
+    "disabledStatus": "Solo mode is disabled."
+  },
+  "ScoreOverride": {
+    "title": "Score Override",
+    "subtitle": "Adjust submitted scores. Every change is recorded in the audit trail.",
+    "judgeLabel": "Judge",
+    "competitorLabel": "Competitor",
+    "criterionLabel": "Criterion",
+    "newValueLabel": "New Value",
+    "reasonLabel": "Reason",
+    "reasonPlaceholder": "Explain the override",
+    "saveCta": "Save Override",
+    "saving": "Saving…",
+    "auditTitle": "Audit Trail",
+    "auditEmpty": "No overrides recorded yet.",
+    "auditLoading": "Loading audit trail…",
+    "auditEntry": "{actor} changed {competitor} / {criterion} from {oldValue} to {newValue}",
+    "auditTimestamp": "{time}",
+    "noScoresToOverride": "No scores yet to override."
+  },
+  "Competitors": {
+    "title": "Competitor Management",
+    "loading": "Loading competitors…",
+    "active": "Active",
+    "withdrawn": "Withdrawn",
+    "withdrawCta": "Withdraw",
+    "rescueCta": "Rescue",
+    "withdrawing": "Withdrawing…",
+    "rescuing": "Rescuing…",
+    "reasonLabel": "Reason",
+    "reasonPlaceholder": "Why is this competitor withdrawing?",
+    "confirmWithdraw": "Click again to confirm withdrawal",
+    "confirmRescue": "Click again to confirm rescue"
+  },
+  "Judge": {
+    "loading": "Loading…",
+    "invalidLink": "This judge link is invalid or has been revoked.",
+    "trainingMode": "JUDGE TRAINING MODE",
+    "trainingSubtitle": "Practice scoring with sample competitors. Nothing here affects real results.",
+    "exitTraining": "Exit training",
+    "waitingForCypher": "Waiting for the organizer to start the cypher phase.",
+    "groupLabel": "Group {n}",
+    "competitorLabel": "Competitor",
+    "criterionLabel": "Criterion",
+    "submitCta": "Submit Score",
+    "submitting": "Submitting…",
+    "submitted": "Submitted",
+    "queueHeader": "Pending submissions ({n})",
+    "queueDraining": "Draining queue…",
+    "queueDrained": "Queue drained.",
+    "offline": "Offline — your scores are being saved locally.",
+    "reconnecting": "Reconnecting…",
+    "voteForA": "Vote {name}",
+    "voteForB": "Vote {name}",
+    "voteTie": "Tie",
+    "voteSubmitting": "Submitting…",
+    "voteSubmitted": "Vote submitted",
+    "battlesWaiting": "Waiting for the next matchup.",
+    "battlesDone": "Battles complete."
+  },
+  "PublicStandings": {
+    "title": "Standings",
+    "loading": "Loading standings…",
+    "notFound": "Competition not found.",
+    "preCypher": "Standings will appear once scoring begins.",
+    "rankHeader": "#",
+    "competitorHeader": "Competitor",
+    "scoreHeader": "Score",
+    "advancingBadge": "Advancing"
+  },
+  "PublicBracket": {
+    "title": "Bracket",
+    "loading": "Loading bracket…",
+    "notFound": "Competition not found.",
+    "notGenerated": "Bracket has not been generated yet.",
+    "byeLabel": "BYE",
+    "tbdLabel": "TBD",
+    "championLabel": "🏆 Champion"
+  },
+  "Presenter": {
+    "loading": "Loading…",
+    "notFound": "Competition not found.",
+    "scoringPhase": "Now scoring",
+    "battlesPhase": "Battles",
+    "complete": "Competition complete",
+    "currentMatchup": "Current Matchup",
+    "nextUp": "Next Up",
+    "leader": "Leader",
+    "champion": "🏆 Champion"
+  },
+  "Auth": {
+    "signInTitle": "Sign in to Competition Platform",
+    "signUpTitle": "Create your account"
   },
   "Errors": {
     "COMPETITION_ALREADY_STARTED": "The competition has already been started.",

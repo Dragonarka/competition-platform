@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { useAdminSocket } from '@/hooks/use-admin-socket';
 import { DashboardKpiCards } from './dashboard-kpi-cards';
@@ -13,12 +14,6 @@ const STATUS_COLORS: Record<string, string> = {
   connected: 'bg-green-500',
   reconnecting: 'bg-yellow-400 animate-pulse',
   disconnected: 'bg-red-500',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  connected: 'Live',
-  reconnecting: 'Reconnecting...',
-  disconnected: 'Offline',
 };
 
 const MAX_RECENT_SCORES = 10;
@@ -38,6 +33,7 @@ interface DashboardLiveIslandProps {
 }
 
 export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps) {
+  const t = useTranslations('Dashboard');
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [clerkToken, setClerkToken] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<
@@ -54,20 +50,17 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
     { enabled: Boolean(competitionId) && isLoaded && Boolean(isSignedIn) },
   );
 
-  // Fetch Clerk token only when auth has loaded and user is signed in.
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     let cancelled = false;
-    void getToken().then((t) => {
-      if (!cancelled) setClerkToken(t);
+    void getToken().then((tok) => {
+      if (!cancelled) setClerkToken(tok);
     });
     return () => {
       cancelled = true;
     };
   }, [isLoaded, isSignedIn, getToken]);
 
-  // Gate the socket connection on the auth state, not just the cached token —
-  // a previously-fetched token must not be used after sign-out.
   const effectiveToken = isLoaded && isSignedIn ? clerkToken : null;
 
   useAdminSocket({
@@ -83,9 +76,6 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
     },
 
     onScoreOverridden: () => {
-      // The override flow already broadcasts standings.updated separately
-      // (recomputed totals reach onStandingsUpdated). Just refresh the
-      // snapshot's score counts and the override list.
       void utils.tournament.getDashboardSnapshot.invalidate({ competitionId });
       void utils.tournament.listScoresForOverride.invalidate({ competitionId });
     },
@@ -161,26 +151,27 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
     },
   });
 
-  // Auth still loading — render skeleton-style placeholder, NOT an
-  // "Authentication required" message which would mislead authenticated users.
+  const statusLabel: string =
+    connectionStatus === 'connected'
+      ? t('liveStatusConnected')
+      : connectionStatus === 'reconnecting'
+        ? t('liveStatusReconnecting')
+        : t('liveStatusDisconnected');
+
   if (!isLoaded) {
-    return <p className="text-sm text-muted-foreground">Loading...</p>;
+    return <p className="text-sm text-muted-foreground">{t('authLoading')}</p>;
   }
 
   if (!isSignedIn) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Authentication required to view the live dashboard.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground">{t('authRequired')}</p>;
   }
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading dashboard...</p>;
+    return <p className="text-sm text-muted-foreground">{t('loading')}</p>;
   }
 
   if (!snapshot) {
-    return <p className="text-sm text-muted-foreground">Competition not found.</p>;
+    return <p className="text-sm text-muted-foreground">{t('competitionNotFound')}</p>;
   }
 
   const connectedJudges = snapshot.judges.filter((j) => j.connected).length;
@@ -198,15 +189,13 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
           <div
             className={`w-3 h-3 rounded-full ${STATUS_COLORS[connectionStatus] ?? 'bg-gray-400'}`}
           />
-          <span className="text-xs text-muted-foreground">
-            {STATUS_LABELS[connectionStatus] ?? connectionStatus}
-          </span>
+          <span className="text-xs text-muted-foreground">{statusLabel}</span>
         </div>
       </div>
 
       {socketError && (
         <div className="rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          Live updates unavailable: {socketError}
+          {t('liveUpdatesError', { message: socketError })}
         </div>
       )}
 
@@ -220,7 +209,7 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
 
       <section>
         <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">
-          Judge Status
+          {t('judgeStatus')}
         </h3>
         <DashboardJudgeGrid judges={snapshot.judges} />
       </section>
@@ -228,17 +217,23 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section>
           <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">
-            Top 10 Standings
+            {t('topStandings')}
           </h3>
           {snapshot.topStandings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No scores yet.</p>
+            <p className="text-sm text-muted-foreground">{t('noScores')}</p>
           ) : (
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left py-2 pr-3 font-semibold text-muted-foreground w-8">#</th>
-                  <th className="text-left py-2 pr-3 font-semibold text-muted-foreground">Name</th>
-                  <th className="text-right py-2 font-semibold text-muted-foreground">Score</th>
+                  <th className="text-left py-2 pr-3 font-semibold text-muted-foreground w-8">
+                    {t('tableRank')}
+                  </th>
+                  <th className="text-left py-2 pr-3 font-semibold text-muted-foreground">
+                    {t('tableName')}
+                  </th>
+                  <th className="text-right py-2 font-semibold text-muted-foreground">
+                    {t('tableScore')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -256,7 +251,7 @@ export function DashboardLiveIsland({ competitionId }: DashboardLiveIslandProps)
 
         <section>
           <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">
-            Recent Scores
+            {t('recentScores')}
           </h3>
           <DashboardRecentScores
             entries={recentScores}

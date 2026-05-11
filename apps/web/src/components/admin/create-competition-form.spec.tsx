@@ -30,6 +30,23 @@ vi.mock('@/lib/trpc', () => ({
   },
 }));
 
+vi.mock('@/i18n/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), back: vi.fn() }),
+}));
+
+vi.mock('next-intl', () => ({
+  useTranslations: (ns?: string) => (key: string, params?: Record<string, string>) => {
+    if (params?.source && key === 'clonedNameDefault') return `${params.source} (Simulation)`;
+    if (params?.source && key === 'cloneSourceHint')
+      return `Configuration will be cloned from ${params.source}`;
+    if (key === 'loadingSource') return 'Loading source competition…';
+    if (ns === 'Competitions' && key === 'create') return 'Create Competition';
+    if (ns === 'Competitions' && key === 'createSimulation') return 'Create Simulation';
+    if (ns === 'Common' && key === 'cancel') return 'Cancel';
+    return ns ? `${ns}.${key}` : key;
+  },
+}));
+
 import { CreateCompetitionForm } from './create-competition-form';
 
 interface RenderResult {

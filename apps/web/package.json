@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint && tsx scripts/check-i18n-parity.ts && tsx scripts/check-error-code-coverage.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -47,6 +47,7 @@
     "eslint-config-next": "16.2.3",
     "jsdom": "^25.0.0",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^2.0.0"
   }

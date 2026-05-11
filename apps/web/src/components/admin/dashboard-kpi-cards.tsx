@@ -1,12 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+'use client';
 
-const PHASE_LABELS: Record<string, string> = {
-  configuration: 'Configuration',
-  cypher: 'Cypher — Scoring',
-  'cypher-review': 'Cypher — Review',
-  battles: 'Battles',
-  completed: 'Completed',
-};
+import { useTranslations } from 'next-intl';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const STATUS_DOT: Record<string, string> = {
   configuration: 'bg-gray-400',
@@ -31,12 +26,14 @@ export function DashboardKpiCards({
   connectedJudges,
   totalJudges,
 }: DashboardKpiCardsProps) {
+  const t = useTranslations('Dashboard');
+  const tPhase = useTranslations('Dashboard.phaseLabels');
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Phase
+            {t('phase')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -44,9 +41,7 @@ export function DashboardKpiCards({
             <div
               className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[currentPhase] ?? 'bg-gray-400'}`}
             />
-            <span className="text-lg font-semibold">
-              {PHASE_LABELS[currentPhase] ?? currentPhase}
-            </span>
+            <span className="text-lg font-semibold">{tPhase(currentPhase)}</span>
           </div>
         </CardContent>
       </Card>
@@ -54,7 +49,7 @@ export function DashboardKpiCards({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Scores
+            {t('scoresKpi')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -65,14 +60,14 @@ export function DashboardKpiCards({
               / {totalScoresExpected}
             </span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">submitted / expected</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('scoresKpiHint')}</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-            Judges Online
+            {t('judgesOnline')}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -80,7 +75,7 @@ export function DashboardKpiCards({
             {connectedJudges}
             <span className="text-base font-normal text-muted-foreground"> / {totalJudges}</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">connected / total</p>
+          <p className="text-xs text-muted-foreground mt-1">{t('judgesOnlineHint')}</p>
         </CardContent>
       </Card>
     </div>

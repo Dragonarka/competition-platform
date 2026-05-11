@@ -1,19 +1,26 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
-import Link from 'next/link';
 import { LayoutDashboard, Trophy } from 'lucide-react';
+import { getTranslations } from 'next-intl/server';
+import { Link } from '@/i18n/navigation';
 
-const navItems = [
-  { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/competitions', icon: Trophy, label: 'Competitions' },
-];
+// All admin routes are Clerk-gated and cannot be prerendered.
+export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth();
   if (!userId) {
     redirect('/sign-in');
   }
+
+  const t = await getTranslations('AdminNav');
+  const tApp = await getTranslations('App');
+
+  const navItems = [
+    { href: '/dashboard', icon: LayoutDashboard, label: t('dashboard') },
+    { href: '/competitions', icon: Trophy, label: t('competitions') },
+  ];
 
   return (
     <div className="min-h-screen flex">
@@ -35,7 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <span className="font-semibold text-foreground">Competition Platform</span>
+          <span className="font-semibold text-foreground">{tApp('title')}</span>
           <UserButton />
         </header>
         <main className="flex-1 p-6">{children}</main>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations, useFormatter } from 'next-intl';
 import type { ScoreSubmittedPayload } from '@competition-platform/shared';
 
 interface RecentScoreEntry {
@@ -23,21 +24,24 @@ function totalRawScore(scores: { value: string }[]): string {
   return sum.toFixed(2);
 }
 
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString();
-  } catch {
-    return iso;
-  }
-}
-
 export function DashboardRecentScores({
   entries,
   judgeLabels,
   competitorNames,
 }: DashboardRecentScoresProps) {
+  const t = useTranslations('Dashboard');
+  const format = useFormatter();
+
+  function formatTime(iso: string): string {
+    try {
+      return format.dateTime(new Date(iso), { timeStyle: 'medium' });
+    } catch {
+      return iso;
+    }
+  }
+
   if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">No scores submitted yet.</p>;
+    return <p className="text-sm text-muted-foreground">{t('noRecentScores')}</p>;
   }
 
   return (
@@ -52,7 +56,9 @@ export function DashboardRecentScores({
               {competitorNames.get(entry.competitorId) ?? entry.competitorId}
             </span>
             <span className="text-xs text-muted-foreground truncate block">
-              by {judgeLabels.get(entry.judgeSessionId) ?? entry.judgeSessionId}
+              {t('byJudge', {
+                judge: judgeLabels.get(entry.judgeSessionId) ?? entry.judgeSessionId,
+              })}
             </span>
           </div>
           <div className="text-right flex-shrink-0">

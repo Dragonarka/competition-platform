@@ -99,6 +99,7 @@ _This file contains critical rules and patterns that AI agents MUST follow when 
 - **Form mutation UX pattern:** `onSuccess` → `utils.<query>.invalidate(...)` + reset form state. `onError` → store error in local state and render inline (e.g., below the field that caused it). For optimistic updates, roll back local state in `onError`.
 - **Client components must start with `'use client';`.** Server page components stay server; make one client-boundary component per feature (e.g., `CriteriaManager`, `ParticipantsManager`).
 - **Date timezone footgun:** `new Date(date).toISOString()` gives midnight UTC which shifts by a day in negative timezones. Use noon UTC for date-only inputs: `${date}T12:00:00.000Z`. (Fixed in Story 2.1 [M3].)
+- **No hardcoded user-facing strings in `apps/web/src/`.** Route every label, placeholder, `aria-label`, `alt`, tooltip, and error message through `next-intl`. Server components → `getTranslations('Namespace')`; client components → `useTranslations('Namespace')`. Error codes from `packages/shared/errors/error-codes.ts` resolve through `getTrpcErrorI18nKey()` → `Errors.<CODE>` keys. Routing: import `Link`/`useRouter`/`usePathname` from `@/i18n/navigation` (NOT `next/link` / `next/navigation`) so locale prefixes propagate. CI parity + coverage scripts gate the lint task. See `apps/web/src/i18n/README.md`. (Story 8.1.)
 
 ### Testing Rules
 

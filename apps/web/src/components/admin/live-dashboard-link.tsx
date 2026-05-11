@@ -1,6 +1,7 @@
 'use client';
 
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { Link } from '@/i18n/navigation';
 import { trpc } from '@/lib/trpc';
 import { buttonVariants } from '@/components/ui/button';
 
@@ -9,6 +10,7 @@ interface LiveDashboardLinkProps {
 }
 
 export function LiveDashboardLink({ competitionId }: LiveDashboardLinkProps) {
+  const t = useTranslations('LiveDashboard');
   const { data: competition } = trpc.tournament.getCompetition.useQuery({ competitionId });
 
   if (competition?.status !== 'active') return null;
@@ -16,13 +18,13 @@ export function LiveDashboardLink({ competitionId }: LiveDashboardLinkProps) {
   return (
     <div className="flex flex-wrap gap-2">
       <Link href={`/competitions/${competitionId}/live`} className={buttonVariants()}>
-        Open Live Dashboard →
+        {t('linkLabel')} →
       </Link>
       <Link
         href={`/competitions/${competitionId}/scores`}
         className={buttonVariants({ variant: 'outline' })}
       >
-        Manage Scores
+        {t('manageScores')}
       </Link>
     </div>
   );

@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CriteriaManager } from '@/components/admin/criteria-manager';
 import { ParticipantsManager } from '@/components/admin/participants-manager';
@@ -20,10 +21,11 @@ export default async function CompetitionConfigPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const t = await getTranslations('CompetitionConfig');
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-foreground">Competition Configuration</h1>
+        <h1 className="text-2xl font-semibold text-foreground">{t('pageTitle')}</h1>
         <div className="flex items-center gap-2">
           <OpenSimulationLink competitionId={id} />
           <SimulateConfigLink competitionId={id} />
@@ -38,11 +40,11 @@ export default async function CompetitionConfigPage({
       <StartCypherPhasePanel competitionId={id} />
       <Tabs defaultValue="criteria">
         <TabsList>
-          <TabsTrigger value="criteria">Evaluation Criteria</TabsTrigger>
-          <TabsTrigger value="participants">Participants</TabsTrigger>
-          <TabsTrigger value="competitors">Competitors</TabsTrigger>
-          <TabsTrigger value="judge-groups">Judge Groups</TabsTrigger>
-          <TabsTrigger value="judge-links">Judge Links</TabsTrigger>
+          <TabsTrigger value="criteria">{t('tabs.criteria')}</TabsTrigger>
+          <TabsTrigger value="participants">{t('tabs.participants')}</TabsTrigger>
+          <TabsTrigger value="competitors">{t('tabs.competitors')}</TabsTrigger>
+          <TabsTrigger value="judge-groups">{t('tabs.judgeGroups')}</TabsTrigger>
+          <TabsTrigger value="judge-links">{t('tabs.judgeLinks')}</TabsTrigger>
         </TabsList>
         <TabsContent value="criteria">
           <CriteriaManager competitionId={id} />

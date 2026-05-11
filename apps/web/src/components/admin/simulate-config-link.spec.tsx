@@ -18,6 +18,14 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
+vi.mock('@/i18n/navigation', () => ({
+  Link: (props: Record<string, unknown>) => createElement('a', props),
+}));
+
+vi.mock('next-intl', () => ({
+  useTranslations: () => (key: string) => `Simulation.${key}`,
+}));
+
 import { SimulateConfigLink } from './simulate-config-link';
 
 interface RenderResult {
@@ -96,7 +104,7 @@ describe('SimulateConfigLink', () => {
   it('renders link when competition has judge config', async () => {
     getCompetitionMock.mockReturnValue({ data: baseComp });
     const { container, unmount } = await render();
-    expect(container.textContent).toContain('Simulate This Config');
+    expect(container.textContent).toContain('Simulation.configLink');
     const link = container.querySelector('a');
     expect(link?.getAttribute('href')).toContain('simulation=true&source=comp_1');
     unmount();
@@ -112,7 +120,7 @@ describe('SimulateConfigLink', () => {
       },
     });
     const { container, unmount } = await render();
-    expect(container.textContent).toContain('Simulate This Config');
+    expect(container.textContent).toContain('Simulation.configLink');
     unmount();
   });
 
@@ -126,7 +134,7 @@ describe('SimulateConfigLink', () => {
       },
     });
     const { container, unmount } = await render();
-    expect(container.textContent).toContain('Simulate This Config');
+    expect(container.textContent).toContain('Simulation.configLink');
     unmount();
   });
 });

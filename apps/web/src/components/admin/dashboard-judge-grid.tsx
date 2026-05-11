@@ -1,3 +1,6 @@
+'use client';
+
+import { useTranslations, useFormatter } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
 
 interface JudgeEntry {
@@ -15,18 +18,21 @@ interface DashboardJudgeGridProps {
   judges: JudgeEntry[];
 }
 
-function formatLastSeen(iso: string | null): string {
-  if (!iso) return 'Never';
-  try {
-    return new Date(iso).toLocaleTimeString();
-  } catch {
-    return iso;
-  }
-}
-
 export function DashboardJudgeGrid({ judges }: DashboardJudgeGridProps) {
+  const t = useTranslations('Dashboard');
+  const format = useFormatter();
+
+  function formatLastSeen(iso: string | null): string {
+    if (!iso) return t('neverSeen');
+    try {
+      return format.dateTime(new Date(iso), { timeStyle: 'medium' });
+    } catch {
+      return iso;
+    }
+  }
+
   if (judges.length === 0) {
-    return <p className="text-sm text-muted-foreground">No judges assigned yet.</p>;
+    return <p className="text-sm text-muted-foreground">{t('noJudges')}</p>;
   }
 
   return (
@@ -42,27 +48,32 @@ export function DashboardJudgeGrid({ judges }: DashboardJudgeGridProps) {
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {judge.queueSize > 0 && (
                   <span className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 px-1.5 py-0.5 rounded font-medium">
-                    {judge.queueSize} pending
+                    {t('judgePending', { n: judge.queueSize })}
                   </span>
                 )}
                 <div
                   className={`w-2.5 h-2.5 rounded-full ${
                     judge.connected ? 'bg-green-500' : 'bg-yellow-400'
                   }`}
-                  title={judge.connected ? 'Connected' : 'Disconnected'}
+                  title={judge.connected ? t('judgeConnected') : t('judgeDisconnected')}
                 />
               </div>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {judge.groupIndex !== null && (
-                <span className="bg-muted px-1.5 py-0.5 rounded">Group {judge.groupIndex + 1}</span>
+                <span className="bg-muted px-1.5 py-0.5 rounded">
+                  {t('judgeGroup', { n: judge.groupIndex + 1 })}
+                </span>
               )}
               <span>
-                {judge.submittedCount}/{judge.expectedCount} scored
+                {t('judgeScored', {
+                  submitted: judge.submittedCount,
+                  expected: judge.expectedCount,
+                })}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Last seen: {formatLastSeen(judge.lastSeenAt)}
+              {t('lastSeen', { time: formatLastSeen(judge.lastSeenAt) })}
             </p>
           </CardContent>
         </Card>
