@@ -1,0 +1,51 @@
+{
+  "Common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading…",
+    "error": "Error",
+    "retry": "Retry",
+    "delete": "Delete",
+    "edit": "Edit",
+    "submit": "Submit",
+    "confirm": "Confirm"
+  },
+  "App": {
+    "title": "Competition Platform",
+    "description": "Real-time WebSocket competition platform"
+  },
+  "Errors": {
+    "COMPETITION_ALREADY_STARTED": "The competition has already been started.",
+    "JUDGE_CONFIG_MISSING": "Judge configuration is required before starting.",
+    "NO_CRITERIA_DEFINED": "At least one evaluation criterion must be defined before starting.",
+    "NO_PARTICIPANTS_REGISTERED": "At least one participant must be registered before starting.",
+    "INSUFFICIENT_JUDGE_LINKS": "More judge links are required (one per group).",
+    "PHASE_NOT_ACTIVE": "The competition is not in an active phase.",
+    "COMPETITOR_NOT_ASSIGNED": "Competitor is not assigned to this judge.",
+    "SCORE_OUTSIDE_RANGE": "Score is outside the allowed range.",
+    "SCORE_ALREADY_SUBMITTED": "A score has already been submitted for this competitor.",
+    "CYPHER_NOT_ACTIVE": "The cypher phase is not active.",
+    "ADVANCEMENT_THRESHOLD_NOT_SET": "Advancement threshold has not been configured.",
+    "SCORE_NOT_FOUND": "Score not found.",
+    "OVERRIDE_NOT_ALLOWED_IN_PHASE": "Score overrides are not allowed in the current phase.",
+    "COMPETITOR_NOT_FOUND": "Competitor not found.",
+    "COMPETITOR_ALREADY_WITHDRAWN": "Competitor has already been withdrawn.",
+    "COMPETITOR_NOT_WITHDRAWN": "Competitor is not withdrawn.",
+    "ACTION_NOT_ALLOWED_IN_PHASE": "This action is not allowed in the current phase.",
+    "SOLO_MODE_NOT_ENABLED": "Solo mode is not enabled for this competition.",
+    "SOLO_MODE_LOCKED": "Solo mode can only be toggled before the competition starts.",
+    "BATTLES_NOT_ACTIVE": "The battles phase is not active.",
+    "MATCHUP_NOT_FOUND": "Matchup not found.",
+    "MATCHUP_NOT_IN_COMPETITION": "Matchup does not belong to this competition.",
+    "MATCHUP_ALREADY_RESOLVED": "Matchup has already been resolved.",
+    "MATCHUP_IS_BYE": "Bye matchups auto-advance and accept no votes.",
+    "VOTE_OUTSIDE_OPTIONS": "Vote is not one of the allowed options.",
+    "TIE_RESOLUTION_REASON_REQUIRED": "A reason is required to resolve this tie.",
+    "MATCHUP_NOT_TIED": "Matchup is not currently tied.",
+    "WINNER_NOT_IN_MATCHUP": "Selected winner is not part of this matchup.",
+    "ORGANIZER_SCORING_NOT_ENABLED": "Organizer scoring requires solo mode or simulation mode.",
+    "SIMULATION_JUDGE_INDEX_OUT_OF_RANGE": "Simulation judge index is out of range.",
+    "SIMULATION_NOT_ENABLED": "This is not a simulation competition.",
+    "UNKNOWN": "An unexpected error occurred."
+  }
+}

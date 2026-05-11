@@ -1,0 +1,51 @@
+{
+  "Common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "loading": "Cargando…",
+    "error": "Error",
+    "retry": "Reintentar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "submit": "Enviar",
+    "confirm": "Confirmar"
+  },
+  "App": {
+    "title": "Plataforma de Competencia",
+    "description": "Plataforma de competencias en tiempo real con WebSocket"
+  },
+  "Errors": {
+    "COMPETITION_ALREADY_STARTED": "La competencia ya ha comenzado.",
+    "JUDGE_CONFIG_MISSING": "Se requiere configurar los jueces antes de comenzar.",
+    "NO_CRITERIA_DEFINED": "Debe definirse al menos un criterio de evaluación antes de comenzar.",
+    "NO_PARTICIPANTS_REGISTERED": "Debe registrarse al menos un participante antes de comenzar.",
+    "INSUFFICIENT_JUDGE_LINKS": "Se requieren más enlaces de juez (uno por grupo).",
+    "PHASE_NOT_ACTIVE": "La competencia no se encuentra en una fase activa.",
+    "COMPETITOR_NOT_ASSIGNED": "El competidor no está asignado a este juez.",
+    "SCORE_OUTSIDE_RANGE": "La puntuación está fuera del rango permitido.",
+    "SCORE_ALREADY_SUBMITTED": "Ya se ha enviado una puntuación para este competidor.",
+    "CYPHER_NOT_ACTIVE": "La fase de cypher no está activa.",
+    "ADVANCEMENT_THRESHOLD_NOT_SET": "No se ha configurado el umbral de avance.",
+    "SCORE_NOT_FOUND": "Puntuación no encontrada.",
+    "OVERRIDE_NOT_ALLOWED_IN_PHASE": "No se permiten cambios de puntuación en la fase actual.",
+    "COMPETITOR_NOT_FOUND": "Competidor no encontrado.",
+    "COMPETITOR_ALREADY_WITHDRAWN": "El competidor ya ha sido retirado.",
+    "COMPETITOR_NOT_WITHDRAWN": "El competidor no está retirado.",
+    "ACTION_NOT_ALLOWED_IN_PHASE": "Esta acción no está permitida en la fase actual.",
+    "SOLO_MODE_NOT_ENABLED": "El modo solo no está habilitado para esta competencia.",
+    "SOLO_MODE_LOCKED": "El modo solo solo puede modificarse antes de que comience la competencia.",
+    "BATTLES_NOT_ACTIVE": "La fase de batallas no está activa.",
+    "MATCHUP_NOT_FOUND": "Enfrentamiento no encontrado.",
+    "MATCHUP_NOT_IN_COMPETITION": "El enfrentamiento no pertenece a esta competencia.",
+    "MATCHUP_ALREADY_RESOLVED": "El enfrentamiento ya ha sido resuelto.",
+    "MATCHUP_IS_BYE": "Los enfrentamientos con descanso avanzan automáticamente y no aceptan votos.",
+    "VOTE_OUTSIDE_OPTIONS": "El voto no es una de las opciones permitidas.",
+    "TIE_RESOLUTION_REASON_REQUIRED": "Se requiere una razón para resolver este empate.",
+    "MATCHUP_NOT_TIED": "El enfrentamiento no está empatado actualmente.",
+    "WINNER_NOT_IN_MATCHUP": "El ganador seleccionado no forma parte de este enfrentamiento.",
+    "ORGANIZER_SCORING_NOT_ENABLED": "La puntuación del organizador requiere modo solo o modo simulación.",
+    "SIMULATION_JUDGE_INDEX_OUT_OF_RANGE": "El índice del juez de simulación está fuera de rango.",
+    "SIMULATION_NOT_ENABLED": "Esta no es una competencia de simulación.",
+    "UNKNOWN": "Ocurrió un error inesperado."
+  }
+}

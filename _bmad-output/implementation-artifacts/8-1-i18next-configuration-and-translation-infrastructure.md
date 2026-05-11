@@ -1,6 +1,6 @@
 # Story 8.1: i18n Configuration & Translation Infrastructure
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

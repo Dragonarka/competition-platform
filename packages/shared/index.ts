@@ -3,6 +3,7 @@ export * from './events/scoring-events';
 export * from './events/tournament-events';
 export * from './events/socket-event-map';
 export * from './errors/error-codes';
+export * from './errors/error-i18n-keys';
 export * from './errors/error-types';
 export * from './types/competition.types';
 export * from './types/criterion.types';
