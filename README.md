@@ -1,191 +1,162 @@
 # Competition Platform
 
-Real-time WebSocket competition platform with game theory fairness. Full-stack TypeScript monorepo using Next.js, NestJS, Socket.IO, and Drizzle ORM.
+Real-time WebSocket competition platform with game theory fairness. Full-stack TypeScript monorepo.
 
-## Tech Stack
+📖 **Architecture & deep docs:** [GitHub Pages site](https://dragonarka.github.io/competition-platform/) (also under [`docs/`](./docs))
 
-| Layer     | Technology                         |
-| --------- | ---------------------------------- |
-| Frontend  | Next.js 16 + React 19 + Tailwind 4 |
-| Backend   | NestJS 11 + Socket.IO              |
-| API Layer | tRPC (type-safe end-to-end)        |
-| Database  | PostgreSQL 16 + Drizzle ORM        |
-| Cache     | Redis 7                            |
-| Auth      | Clerk                              |
-| State     | Zustand                            |
-| Monorepo  | pnpm workspaces + Turborepo        |
+---
 
-## Project Structure
-
-```
-apps/
-  web/          → Next.js frontend (port 3000)
-  api/          → NestJS backend  (port 3001)
-packages/
-  db/           → Drizzle schema, migrations, database client
-  shared/       → Shared types and Zod schemas
-  format-sdk/   → Competition format SDK
-  formats/      → Competition format definitions
-  config-eslint/
-  config-typescript/
-tests/          → Playwright E2E tests
-```
-
-## Prerequisites
-
-- **Node.js** >= 20 (see `.nvmrc` for exact version)
-- **pnpm** >= 9
-- **Docker** (for PostgreSQL + Redis)
+## Quickstart (≈3 minutes)
 
 ```sh
-# If using nvm
-nvm use
+# 1. One-time setup — installs deps, brings up Postgres+Redis, runs migrations
+pnpm setup
 
-# Install pnpm if needed
-corepack enable && corepack prepare pnpm@9.15.9 --activate
-```
+# 2. Add your Clerk keys to .env.local (and apps/web/.env.local, apps/api/.env.local)
+#    Get them from https://dashboard.clerk.com → API Keys
 
-## Local Setup
-
-### 1. Install dependencies
-
-```sh
-pnpm install
-```
-
-### 2. Start databases
-
-```sh
-docker compose up -d
-```
-
-This starts:
-
-- **PostgreSQL** on `localhost:5432` (user: `postgres`, password: `postgres`, db: `competition_platform`)
-- **Redis** on `localhost:6379`
-
-### 3. Configure environment
-
-```sh
-cp .env.example .env.local
-```
-
-Edit `.env.local` and add your **Clerk** keys from [clerk.com/dashboard](https://dashboard.clerk.com):
-
-```
-CLERK_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-```
-
-The database and Redis URLs are pre-configured for local Docker.
-
-### 4. Run database migrations
-
-```sh
-pnpm --filter @competition-platform/db db:push
-```
-
-### 5. Start development
-
-```sh
+# 3. Start everything
 pnpm dev
 ```
 
-This runs both apps in parallel via Turborepo:
+Open <http://localhost:3000>. API health: <http://localhost:3001/health>.
 
-- **Web**: http://localhost:3000
-- **API**: http://localhost:3001
+> **First-render quirk:** Turbopack may serve a 500 on the very first cold compile of `/sign-in`. Refresh once — it goes away. See [troubleshooting](./docs/troubleshooting.md).
 
-## Testing on Your Phone (Local Network)
+---
 
-### Option A: Same WiFi (simplest)
+## What's in the box
 
-If your Mac and phone are on the same WiFi network:
+| Layer       | Tech                                 | Port |
+| ----------- | ------------------------------------ | ---- |
+| Web         | Next.js 16 + React 19 + Tailwind 4   | 3000 |
+| API         | NestJS 11 + tRPC + Socket.IO         | 3001 |
+| DB          | PostgreSQL 16 + Drizzle ORM          | 5432 |
+| Cache / pub | Redis 7                              | 6379 |
+| Auth        | Clerk                                | —    |
+| i18n        | next-intl (en + es, `as-needed`)     | —    |
+| State       | Zustand + TanStack Query             | —    |
+| Monorepo    | pnpm 9 + Turborepo                   | —    |
+| E2E         | Playwright (5 projects incl. mobile) | —    |
+| Unit        | Vitest                               | —    |
 
-1. Find your Mac's local IP:
+```
+apps/
+  web/                Next.js frontend
+  api/                NestJS backend (tRPC + Socket.IO)
+packages/
+  db/                 Drizzle schema, migrations
+  shared/             Cross-cutting types + Zod schemas
+  format-sdk/         Plugin SDK for competition formats
+  formats/            First-party format implementations
+  config-eslint, config-typescript
+tests/                Playwright E2E suite
+docs/                 GitHub Pages site (architecture, workflows, deploy)
+scripts/              setup / doctor / reset / CI helpers
+_bmad/                BMAD-method workflow definitions
+_bmad-output/         Planning artifacts (PRDs, stories, retros)
+```
+
+---
+
+## Daily commands
+
+| Run              | What it does                                         |
+| ---------------- | ---------------------------------------------------- |
+| `pnpm setup`     | First-time setup (idempotent — safe to re-run)       |
+| `pnpm dev`       | Start web + api with hot reload                      |
+| `pnpm doctor`    | Health check — env, services, ports                  |
+| `pnpm reset`     | Nuke local state and rebuild (asks for confirmation) |
+| `pnpm test`      | Unit tests (Vitest, all workspaces except E2E)       |
+| `pnpm test:e2e`  | Playwright E2E suite                                 |
+| `pnpm lint`      | ESLint across the monorepo                           |
+| `pnpm typecheck` | TypeScript strict check                              |
+| `pnpm build`     | Production build                                     |
+| `pnpm format`    | Prettier write                                       |
+
+---
+
+## Testing on your phone
+
+### Same WiFi (no auth)
 
 ```sh
-ipconfig getifaddr en0
+ipconfig getifaddr en0          # get your Mac's LAN IP
+# update apps/web/.env.local: NEXT_PUBLIC_API_URL=http://<LAN_IP>:3001
+pnpm dev
+# open http://<LAN_IP>:3000 on phone
 ```
 
-2. The API needs to accept connections from your phone. Create/update `.env.local`:
-
-```
-NEXT_PUBLIC_API_URL=http://<YOUR_LOCAL_IP>:3001
-```
-
-3. Restart `pnpm dev` and open `http://<YOUR_LOCAL_IP>:3000` on your phone's browser.
-
-> **Note:** Clerk auth callbacks may not work with raw IPs. For full auth testing, use a tunnel (Option B or C).
-
-### Option B: Cloudflare Tunnel (recommended, free)
-
-[Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) gives you a public HTTPS URL for free, no account required for quick tunnels.
+### With Clerk auth — use a tunnel
 
 ```sh
-# Install
 brew install cloudflared
-
-# Tunnel the frontend
-cloudflared tunnel --url http://localhost:3000
+cloudflared tunnel --url http://localhost:3000   # public HTTPS URL
+cloudflared tunnel --url http://localhost:3001   # second terminal
 ```
 
-This prints a public URL like `https://random-words.trycloudflare.com`. Open it on your phone.
+Then add both tunnel URLs to Clerk → **Paths** → Allowed origins.
 
-For the API too (in a second terminal):
+---
 
-```sh
-cloudflared tunnel --url http://localhost:3001
-```
+## CI / CD
 
-Then update `.env.local` so the frontend points to the API tunnel:
+Three GitHub Actions workflows:
 
-```
-NEXT_PUBLIC_API_URL=https://<api-tunnel-url>
-```
+| Workflow     | When                  | What                                                 |
+| ------------ | --------------------- | ---------------------------------------------------- |
+| `ci.yml`     | every push + PR       | lint → typecheck → unit → build                      |
+| `test.yml`   | main/develop + weekly | sharded Playwright + burn-in (gated by `ENABLE_E2E`) |
+| `deploy.yml` | push to main          | Fly.io deploy of API (gated by `ENABLE_DEPLOY`)      |
 
-### Option C: ngrok
+Required secrets/variables: see [`docs/ci-secrets-checklist.md`](./docs/ci-secrets-checklist.md).
 
-```sh
-# Install
-brew install ngrok
-
-# You need a free account — sign up at ngrok.com and add your authtoken
-ngrok config add-authtoken <YOUR_TOKEN>
-
-# Tunnel the frontend
-ngrok http 3000
-```
-
-Same idea — you get a public URL. For the API, run a second tunnel on port 3001.
-
-### Clerk Setup for Tunnels
-
-When using tunnels, add your tunnel URL to Clerk's allowed redirect URLs:
-
-1. Go to [Clerk Dashboard](https://dashboard.clerk.com) > Your app > **Paths**
-2. Add your tunnel URL to the allowed origins
-
-## Available Scripts
-
-| Command                 | Description                      |
-| ----------------------- | -------------------------------- |
-| `pnpm dev`              | Start all apps in dev mode       |
-| `pnpm build`            | Build all packages and apps      |
-| `pnpm lint`             | Lint all packages                |
-| `pnpm typecheck`        | Type-check all packages          |
-| `pnpm test`             | Run unit tests (Vitest)          |
-| `pnpm test:e2e`         | Run Playwright E2E tests         |
-| `pnpm test:e2e:ui`      | Run E2E tests with Playwright UI |
-| `pnpm test:e2e:install` | Install Playwright browsers      |
-| `pnpm format`           | Format code with Prettier        |
+---
 
 ## Deployment
 
-The API is configured for [Fly.io](https://fly.io) deployment (see `fly.toml`):
+Currently:
 
-```sh
-fly deploy
+- **API** → Fly.io Bogotá (`fly.toml`, scale-to-zero, 512MB shared VM). Triggered by `ENABLE_DEPLOY=true` + `FLY_API_TOKEN`.
+- **Web** → not yet configured (decision pending: Vercel vs Fly with Dockerfile).
+- **DB / Redis** → planned: Neon Serverless + Upstash. Currently local Docker only.
+
+Full deploy guide: [`docs/deploy.md`](./docs/deploy.md).
+
+---
+
+## BMAD workflows
+
+This repo uses [BMAD-method](https://github.com/bmad-code-org/BMAD-METHOD) for planning, story execution, and test architecture. Invoke via slash commands:
+
+```
+/bmad-help                          → catalog of all workflows
+/bmad-bmm-create-story              → start a new story
+/bmad-bmm-dev-story                 → execute a story
+/bmad-tea-testarch-framework        → scaffold/extend test infra
+/bmad-tea-testarch-ci               → wire/repair CI
 ```
 
-Deploys the NestJS API to the BOG (Bogota) region.
+Inputs live in [`_bmad/`](./_bmad), outputs in [`_bmad-output/`](./_bmad-output). See [`docs/workflows.md`](./docs/workflows.md).
+
+---
+
+## Troubleshooting
+
+| Symptom                              | Fix                                                     |
+| ------------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------- |
+| `pnpm setup` fails on docker         | Start Docker Desktop, retry                             |
+| `/sign-in` returns 500 on cold start | Turbopack first-compile quirk — refresh once            |
+| `useTranslations context not found`  | Same as above; transient                                |
+| Postgres connection refused          | `docker compose up -d` then `pnpm doctor`               |
+| Clerk redirect loop                  | Check `NEXT_PUBLIC_CLERK_*_URL` values in `.env.local`  |
+| `pnpm test` runs Playwright          | Update to latest — script now filters out E2E workspace |
+| `Invalid path: /(en                  | es)?...`                                                | Old Clerk middleware bug, fixed in `apps/web/src/proxy.ts` |
+
+More: [`docs/troubleshooting.md`](./docs/troubleshooting.md).
+
+---
+
+## License
+
+Proprietary. © Dragonarka.
