@@ -644,6 +644,13 @@
     "signInTitle": "Sign in to Competition Platform",
     "signUpTitle": "Create your account"
   },
+  "LanguageSwitcher": {
+    "label": "Change language",
+    "english": "English",
+    "spanish": "Spanish",
+    "shortEn": "EN",
+    "shortEs": "ES"
+  },
   "Errors": {
     "COMPETITION_ALREADY_STARTED": "The competition has already been started.",
     "JUDGE_CONFIG_MISSING": "Judge configuration is required before starting.",

@@ -13,6 +13,7 @@ import { isNetworkError } from '@/lib/network-error';
 import { BattlesVotingScreen } from '@/components/judge/battles-voting-screen';
 // TODO: load via FormatRenderer once format registry is implemented
 import { JudgeScoreInput } from '@competition-platform/format-cypher-battles';
+import { LanguageSwitcher } from '@/components/i18n/language-switcher';
 
 const STATUS_COLORS = {
   connected: 'bg-green-500',
@@ -201,6 +202,7 @@ export default function JudgePage() {
           {t('queuedCount', { n: offlineQueue.queueSize })}
         </span>
       )}
+      <LanguageSwitcher variant="compact" className="ml-1" />
     </div>
   );
 

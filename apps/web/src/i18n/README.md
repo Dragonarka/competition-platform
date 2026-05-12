@@ -61,6 +61,47 @@ Routes nest under `app/[locale]/...`. Locale detection runs in `apps/web/src/pro
 
 Format plugins (e.g. `packages/formats/cypher-battles`) are domain-agnostic libraries — they MUST NOT own translation files. The host platform passes translated strings via a `labels` prop. Plugin contracts expose typed `Labels` interfaces; host wires them with `useTranslations(...)` results.
 
+## Switching language
+
+The shared `<LanguageSwitcher>` from `@/components/i18n/language-switcher` is mounted in every surface layout (admin header, judge page header, public-page layout, presenter-page layout, auth-page layout). Don't roll your own — the component handles cookie + localStorage + server-side persistence in one place.
+
+Two variants:
+
+- `variant="default"` (full label) — used in admin and auth headers.
+- `variant="compact"` — short `EN`/`ES` toggle for projector / public chrome.
+
+## Persistence precedence
+
+When the platform decides which locale to render, it consults sources in this order:
+
+1. **Authenticated `users.preferred_locale`** (organizers only) — read by the admin layout's `<OrganizerLocaleReconciler />`. If it differs from the URL locale, the layout redirects to the matching path.
+2. **`NEXT_LOCALE` cookie** — set by `next-intl`'s middleware on every locale change (via `useRouter().replace(...)` from `@/i18n/navigation`).
+3. **`localStorage.preferredLocale`** — written by `<LanguageSwitcher>` on every switch. Read by `<LocaleBootstrap />` as a fallback when the cookie is missing (Safari ITP / private-mode contexts) AND the user is unauthenticated.
+4. **Default `en`** — applied by `next-intl` routing config when nothing else is set.
+
+## First-time organizer flow
+
+When an organizer signs in for the first time, no row exists in `users`. The reconciler reads `getPreferences()` which returns the `en` default. If the URL the user landed on is `/es/...`, the reconciler treats that as deliberate intent and seeds the `users` row with `'es'` via `setPreference({ locale: 'es' })` — it does NOT redirect away. Otherwise the URL wins and no write happens until the user uses the switcher.
+
+## Cross-device sync
+
+Cross-device propagation is **next-page-load semantics**, not real-time. Organizer A switches to Spanish on phone → next time A opens any admin page on laptop, the reconciler reads the stored preference and redirects. There is no Clerk webhook → Socket.IO broadcast pushing the change to existing open sessions. This is by design; if real-time sync is needed, design a separate story.
+
+## Adding a new locale
+
+1. Add the locale code to `apps/web/src/i18n/routing.ts` (`locales` array).
+2. Create `apps/web/messages/<code>.json` with the same key structure as `en.json` (CI parity check enforces).
+3. Update the Zod enum in `packages/shared/validation/user.schema.ts` (`SUPPORTED_LOCALES`).
+4. Update the DB CHECK constraint:
+   ```sql
+   ALTER TABLE users DROP CONSTRAINT users_locale_check;
+   ALTER TABLE users ADD CONSTRAINT users_locale_check
+     CHECK (preferred_locale IN ('en', 'es', '<new>'));
+   ```
+5. Add a third `<option>` to `<LanguageSwitcher>` (or refactor to render `SUPPORTED_LOCALES.map(...)` if not already).
+
+The CI parity script catches missing JSON keys. Nothing catches Zod/CHECK drift automatically — review carefully.
+
 ## Running the CI checks locally
 
 ```bash

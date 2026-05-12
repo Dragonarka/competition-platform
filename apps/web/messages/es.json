@@ -339,12 +339,12 @@
         "validationOutOfRange": "Puntaje fuera del rango permitido",
         "submitted": "Enviado",
         "panelTitle": "Puntuación Cypher de Simulación",
-        "panelSubtitle": "Puntúa a cada competidor como cada juez de cada grupo. Elige el rol con el que actúas.",
+        "panelSubtitle": "Puntúa a cada competidor como cada juez de cada grupo. Selecciona el rol que estás interpretando.",
         "groupSelectorLabel": "Grupo",
         "groupAriaLabel": "Grupo de jueces",
         "groupOption": "Grupo {letter}",
         "judgeSelectorLabel": "Juez",
-        "judgeAriaLabel": "Slot de juez",
+        "judgeAriaLabel": "Puesto de juez",
         "judgeOption": "Juez {n}",
         "scoredOf": "Puntuado: {scored} de {total} competidores como {role}",
         "noActiveInGroup": "No hay competidores activos en Grupo {letter}.",
@@ -365,7 +365,7 @@
         "panelTitle": "Votación de Batallas de Simulación",
         "panelDesc": "Emite {count} votos por enfrentamiento — uno como cada juez.",
         "judgeSelectorLabel": "Juez",
-        "judgeSelectorAria": "Slot de juez",
+        "judgeSelectorAria": "Puesto de juez",
         "judgeOption": "Juez {n}",
         "matchupHeaderFmt": "Ronda {round} · Enfrentamiento {match}",
         "voteRecordedAsJudge": "Voto registrado como Juez {n} ✓",
@@ -529,7 +529,7 @@
     "voteSubmitted": "Voto enviado",
     "battlesWaiting": "Esperando el siguiente enfrentamiento.",
     "battlesDone": "Batallas finalizadas.",
-    "seed": "Sembrado {n}",
+    "seed": "Cabeza de serie {n}",
     "scoreIdPrefix": "ID:",
     "scoreRange": " ({min}–{max})",
     "scoreOutOfRange": "{criterion}: ingresa un valor entre {min} y {max}",
@@ -603,7 +603,7 @@
     "winnerBadge": "Ganador",
     "byeBadge": "Bye",
     "championBanner": "Campeón: {name}",
-    "championWithSeed": "Campeón: {name} (Sembrado {seed})",
+    "championWithSeed": "Campeón: {name} (Cabeza de serie {seed})",
     "currentRound": "Ronda actual: {round}",
     "bracketAriaLabel": "Bracket del torneo"
   },
@@ -622,7 +622,7 @@
     "statusReconnecting": "Reconectando…",
     "statusDisconnected": "Desconectado",
     "liveUpdatesError": "Actualizaciones en vivo no disponibles: {message}",
-    "badgeSetup": "PREPARACIÓN",
+    "badgeSetup": "CONFIGURACIÓN",
     "badgeCypher": "PUNTUACIÓN CYPHER",
     "badgeReview": "REVISIÓN EN PROGRESO",
     "badgeBattles": "BATALLAS",
@@ -638,11 +638,18 @@
     "awaitingNextRound": "Esperando la siguiente ronda…",
     "upNext": "A Continuación",
     "championLabel": "Campeón",
-    "seedLabel": "Sembrado #{seed}"
+    "seedLabel": "Cabeza de serie #{seed}"
   },
   "Auth": {
     "signInTitle": "Inicia sesión en Plataforma de Competencia",
     "signUpTitle": "Crea tu cuenta"
+  },
+  "LanguageSwitcher": {
+    "label": "Cambiar idioma",
+    "english": "Inglés",
+    "spanish": "Español",
+    "shortEn": "EN",
+    "shortEs": "ES"
   },
   "Errors": {
     "COMPETITION_ALREADY_STARTED": "La competencia ya ha comenzado.",

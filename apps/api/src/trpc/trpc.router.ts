@@ -1,6 +1,7 @@
 import { t } from './trpc.init';
 import { authRouter } from './routers/auth.router';
 import { createTournamentRouter } from './routers/tournament.router';
+import { createUserRouter } from './routers/user.router';
 import type { DatabaseService } from '../modules/database/database.service';
 import type { ICompetitionGateway } from '../modules/websocket/competition-gateway.interface';
 
@@ -13,6 +14,7 @@ export function createAppRouter(
   return t.router({
     auth: authRouter,
     tournament: createTournamentRouter(db, gateway),
+    user: createUserRouter(db),
   });
 }
 

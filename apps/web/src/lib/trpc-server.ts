@@ -8,8 +8,13 @@ function getApiUrl(): string {
   return process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
 }
 
-export function createServerTrpcClient() {
+export function createServerTrpcClient(token?: string | null) {
   return createTRPCClient<AppRouter>({
-    links: [httpBatchLink({ url: `${getApiUrl()}/trpc` })],
+    links: [
+      httpBatchLink({
+        url: `${getApiUrl()}/trpc`,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }),
+    ],
   });
 }

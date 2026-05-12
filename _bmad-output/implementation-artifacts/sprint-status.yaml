@@ -96,7 +96,7 @@ development_status:
   epic-7-retrospective: done
 
   # ─── Epic 8: Internationalization ───
-  epic-8: in-progress
+  epic-8: done
   8-1-i18next-configuration-and-translation-infrastructure: done
-  8-2-language-switcher-and-persistent-preference: backlog
-  epic-8-retrospective: optional
+  8-2-language-switcher-and-persistent-preference: done
+  epic-8-retrospective: done

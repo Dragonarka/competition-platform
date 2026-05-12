@@ -4,6 +4,8 @@ import { UserButton } from '@clerk/nextjs';
 import { LayoutDashboard, Trophy } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
+import { LanguageSwitcher } from '@/components/i18n/language-switcher';
+import { OrganizerLocaleReconciler } from '@/components/i18n/organizer-locale-reconciler';
 
 // All admin routes are Clerk-gated and cannot be prerendered.
 export const dynamic = 'force-dynamic';
@@ -24,6 +26,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen flex">
+      <OrganizerLocaleReconciler />
       {/* Icon sidebar — 56px fixed width */}
       <aside className="w-14 flex flex-col items-center py-4 gap-1 border-r border-border bg-card shrink-0">
         {navItems.map(({ href, icon: Icon, label }) => (
@@ -43,7 +46,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="flex-1 flex flex-col min-w-0">
         <header className="flex items-center justify-between px-6 py-4 border-b border-border">
           <span className="font-semibold text-foreground">{tApp('title')}</span>
-          <UserButton />
+          <div className="flex items-center gap-3">
+            <LanguageSwitcher />
+            <UserButton />
+          </div>
         </header>
         <main className="flex-1 p-6">{children}</main>
       </div>

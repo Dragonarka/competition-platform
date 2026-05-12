@@ -100,6 +100,7 @@ _This file contains critical rules and patterns that AI agents MUST follow when 
 - **Client components must start with `'use client';`.** Server page components stay server; make one client-boundary component per feature (e.g., `CriteriaManager`, `ParticipantsManager`).
 - **Date timezone footgun:** `new Date(date).toISOString()` gives midnight UTC which shifts by a day in negative timezones. Use noon UTC for date-only inputs: `${date}T12:00:00.000Z`. (Fixed in Story 2.1 [M3].)
 - **No hardcoded user-facing strings in `apps/web/src/`.** Route every label, placeholder, `aria-label`, `alt`, tooltip, and error message through `next-intl`. Server components → `getTranslations('Namespace')`; client components → `useTranslations('Namespace')`. Error codes from `packages/shared/errors/error-codes.ts` resolve through `getTrpcErrorI18nKey()` → `Errors.<CODE>` keys. Routing: import `Link`/`useRouter`/`usePathname` from `@/i18n/navigation` (NOT `next/link` / `next/navigation`) so locale prefixes propagate. CI parity + coverage scripts gate the lint task. See `apps/web/src/i18n/README.md`. (Story 8.1.)
+- **Language switching uses the shared `<LanguageSwitcher>` from `@/components/i18n/language-switcher`.** Don't roll your own — the component handles cookie + localStorage + server-side persistence (`user.setPreference`) in one place. It mounts in every surface layout (admin / judge / public / presenter / auth). For organizers, `<OrganizerLocaleReconciler />` in the admin layout syncs the URL locale to the stored preference on every page render — cross-device propagation is next-page-load semantics, not real-time. (Story 8.2.)
 
 ### Testing Rules
 
@@ -156,6 +157,7 @@ _This file contains critical rules and patterns that AI agents MUST follow when 
 - **Client-side score calculation is forbidden.** All scoring, aggregation, and ranking happens on the server. Client submits raw inputs; server computes everything. (NFR10, architecture rule.)
 - **Every score submission must include a client-generated idempotency key.** Server deduplicates on retry. Scoped per judge session (composite unique index `(judge_session_id, idempotency_key)`) — not globally — to prevent cross-judge collisions.
 - **Venue Wi-Fi is unreliable by assumption.** Every client-server interaction must handle disconnection: localStorage queue for scores, Service Worker retry, connection-state indicator (green/yellow/red).
+- **When adding a new locale, update FOUR places.** (1) `apps/web/src/i18n/routing.ts` `locales` array, (2) `apps/web/messages/<code>.json` with full parity, (3) Zod enum in `packages/shared/validation/user.schema.ts` (`SUPPORTED_LOCALES`), (4) DB `CHECK (preferred_locale IN (...))` constraint on `users`. CI parity check catches the JSON; nothing catches Zod/CHECK drift automatically. (Story 8.2.)
 
 ---
 
@@ -317,4 +319,4 @@ This forces explicit decisions about edge cases (does this delete the audit trai
 - Add rules here immediately when an adversarial review finds a pattern that applies beyond the specific story.
 - When technology stack changes (e.g., Next.js 17, TanStack Query 6), update this file BEFORE starting any story that would touch the changed surface.
 
-Last Updated: 2026-05-11 (Epic 7 retro pattern lift — idempotency stack, socket-event checklist, SSR pattern, split-component pattern, helper-with-mode discriminator, third-consumer extraction rule, inline-confirm UX, broadcastEnrichedStandings pattern, real-DB integration test triggers, reset semantics)
+Last Updated: 2026-05-12 (Story 8.2 — language switcher rule + adding-a-locale rule. Previous: Epic 7 retro pattern lift on 2026-05-11.)

@@ -47,6 +47,7 @@ const TABLES_TO_TRUNCATE = [
   'competitors',
   'evaluation_criteria',
   'competitions',
+  'users',
 ] as const;
 
 export async function truncateAll(db: IntegrationDb): Promise<void> {

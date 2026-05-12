@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation';
 import { TrpcProvider } from '@/lib/trpc';
 import { routing } from '@/i18n/routing';
 import { IntlProviderClient } from '@/i18n/IntlProviderClient';
+import { LocaleBootstrap } from '@/components/i18n/locale-bootstrap';
 import '../globals.css';
 
 const geistSans = Geist({
@@ -59,7 +60,10 @@ export default async function LocaleLayout({
       >
         <body className="min-h-full flex flex-col">
           <IntlProviderClient locale={locale} messages={messages}>
-            <TrpcProvider>{children}</TrpcProvider>
+            <TrpcProvider>
+              <LocaleBootstrap />
+              {children}
+            </TrpcProvider>
           </IntlProviderClient>
         </body>
       </html>
