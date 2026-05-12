@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@clerk/nextjs';
 import { trpc } from '@/lib/trpc';
 import { useAdminSocket } from '@/hooks/use-admin-socket';
@@ -16,13 +17,8 @@ const STATUS_COLORS: Record<string, string> = {
   disconnected: 'bg-red-500',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  connected: 'Live',
-  reconnecting: 'Reconnecting...',
-  disconnected: 'Offline',
-};
-
 export default function PresenterPage() {
+  const t = useTranslations('Presenter');
   const { competitionId } = useParams<{ competitionId: string }>();
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [clerkToken, setClerkToken] = useState<string | null>(null);
@@ -52,8 +48,8 @@ export default function PresenterPage() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     let cancelled = false;
-    void getToken().then((t) => {
-      if (!cancelled) setClerkToken(t);
+    void getToken().then((tok) => {
+      if (!cancelled) setClerkToken(tok);
     });
     return () => {
       cancelled = true;
@@ -130,7 +126,7 @@ export default function PresenterPage() {
         className="flex items-center justify-center min-h-screen"
         data-testid="presenter-loading"
       >
-        <p className="text-lg text-zinc-400">Loading...</p>
+        <p className="text-lg text-zinc-400">{t('loading')}</p>
       </div>
     );
   }
@@ -141,13 +137,19 @@ export default function PresenterPage() {
         className="flex items-center justify-center min-h-screen"
         data-testid="presenter-loading"
       >
-        <p className="text-lg text-zinc-400">Loading competition...</p>
+        <p className="text-lg text-zinc-400">{t('loadingCompetition')}</p>
       </div>
     );
   }
 
   const presenterProps = derivePresenterProps(competition, snapshot, bracket);
   const isStale = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
+  const statusLabel: string =
+    connectionStatus === 'connected'
+      ? t('statusConnected')
+      : connectionStatus === 'reconnecting'
+        ? t('statusReconnecting')
+        : t('statusDisconnected');
 
   return (
     <>
@@ -156,12 +158,12 @@ export default function PresenterPage() {
         data-testid="presenter-connection-badge"
       >
         <span className={`h-2 w-2 rounded-full ${STATUS_COLORS[connectionStatus]}`} />
-        <span className="text-zinc-300">{STATUS_LABELS[connectionStatus]}</span>
+        <span className="text-zinc-300">{statusLabel}</span>
       </div>
 
       {socketError && (
         <div className="fixed bottom-3 left-3 right-3 z-50 rounded-lg bg-red-950/90 px-4 py-2 text-sm text-red-200 backdrop-blur">
-          Live updates unavailable: {socketError}
+          {t('liveUpdatesError', { message: socketError })}
         </div>
       )}
 

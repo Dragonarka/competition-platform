@@ -1,8 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface SimulationCypherPanelProps {
   competitionId: string;
@@ -43,6 +45,8 @@ function SimCompetitorRow({
   simulatedJudgeIndex,
   alreadyScored,
 }: CompetitorRowProps) {
+  const t = useTranslations('Simulation.panels.cypher');
+  const tErr = useTranslations();
   const utils = trpc.useUtils();
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +58,10 @@ function SimCompetitorRow({
       void utils.tournament.getStandings.invalidate({ competitionId });
       void utils.tournament.listScoresForOverride.invalidate({ competitionId });
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
   const allValid = criteria.every((c) => isValidValue(values[c.id] ?? '', c));
@@ -82,7 +89,9 @@ function SimCompetitorRow({
         <div className="font-medium">{competitorName}</div>
         <div className="text-xs text-muted-foreground">{participantId}</div>
         {alreadyScored && (
-          <div className="text-xs text-green-700 dark:text-green-400 mt-0.5">✓ Scored</div>
+          <div className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+            {t('scoredBadge')}
+          </div>
         )}
       </td>
       {criteria.map((c) => (
@@ -92,7 +101,7 @@ function SimCompetitorRow({
             step="0.01"
             min={c.min}
             max={c.max}
-            placeholder={`${c.min}–${c.max}`}
+            placeholder={t('rangePlaceholder', { min: c.min, max: c.max })}
             className="w-24 rounded-md border border-input bg-background px-2 py-1 text-sm"
             value={values[c.id] ?? ''}
             onChange={(e) => setValues((prev) => ({ ...prev, [c.id]: e.target.value }))}
@@ -106,7 +115,7 @@ function SimCompetitorRow({
           onClick={handleSubmit}
           disabled={!allValid || mutation.isPending || alreadyScored}
         >
-          {mutation.isPending ? 'Submitting…' : 'Submit'}
+          {mutation.isPending ? t('submittingShort') : t('submitShort')}
         </Button>
         {error && <p className="text-destructive text-xs mt-1">{error}</p>}
       </td>
@@ -115,6 +124,7 @@ function SimCompetitorRow({
 }
 
 export function SimulationCypherPanel({ competitionId }: SimulationCypherPanelProps) {
+  const t = useTranslations('Simulation.panels.cypher');
   const { data: competition } = trpc.tournament.getCompetition.useQuery({ competitionId });
   const { data: competitorList = [] } = trpc.tournament.listCompetitorsWithStatus.useQuery({
     competitionId,
@@ -164,43 +174,42 @@ export function SimulationCypherPanel({ competitionId }: SimulationCypherPanelPr
 
   const totalActive = activeInGroup.length;
   const scoredCount = activeInGroup.filter((c) => scoredCompetitorIds.has(c.id)).length;
+  const groupLetter = String.fromCharCode(65 + selectedGroup);
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Simulation Cypher Scoring</h2>
-          <p className="text-sm text-muted-foreground">
-            Score each competitor as each judge in each group. Pick the role you&apos;re acting as.
-          </p>
+          <h2 className="text-lg font-semibold">{t('panelTitle')}</h2>
+          <p className="text-sm text-muted-foreground">{t('panelSubtitle')}</p>
         </div>
         <div className="flex gap-2 items-end">
           <label className="flex flex-col text-xs text-muted-foreground">
-            Group
+            {t('groupSelectorLabel')}
             <select
-              aria-label="Judge group"
+              aria-label={t('groupAriaLabel')}
               className="rounded-md border border-input bg-background px-2 py-1 text-sm"
               value={selectedGroup}
               onChange={(e) => setSelectedGroup(parseInt(e.target.value, 10))}
             >
               {Array.from({ length: groupCount }, (_, g) => (
                 <option key={g} value={g}>
-                  Group {String.fromCharCode(65 + g)}
+                  {t('groupOption', { letter: String.fromCharCode(65 + g) })}
                 </option>
               ))}
             </select>
           </label>
           <label className="flex flex-col text-xs text-muted-foreground">
-            Judge
+            {t('judgeSelectorLabel')}
             <select
-              aria-label="Judge slot"
+              aria-label={t('judgeAriaLabel')}
               className="rounded-md border border-input bg-background px-2 py-1 text-sm"
               value={selectedJudge}
               onChange={(e) => setSelectedJudge(parseInt(e.target.value, 10))}
             >
               {Array.from({ length: judgeCount }, (_, j) => (
                 <option key={j} value={j}>
-                  Judge {j + 1}
+                  {t('judgeOption', { n: j + 1 })}
                 </option>
               ))}
             </select>
@@ -208,29 +217,31 @@ export function SimulationCypherPanel({ competitionId }: SimulationCypherPanelPr
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        Scored: {scoredCount} of {totalActive} competitors as {expectedLabel}
+        {t('scoredOf', { scored: scoredCount, total: totalActive, role: expectedLabel })}
       </p>
       {totalActive === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No active competitors in Group {String.fromCharCode(65 + selectedGroup)}.
+          {t('noActiveInGroup', { letter: groupLetter })}
         </p>
       ) : criteria.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Add evaluation criteria before scoring.</p>
+        <p className="text-sm text-muted-foreground">{t('needsCriteria')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="py-2 pr-3 font-semibold text-muted-foreground">Competitor</th>
+                <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                  {t('columnCompetitor')}
+                </th>
                 {criteria.map((c) => (
                   <th key={c.id} className="py-2 pr-3 font-semibold text-muted-foreground">
                     {c.name}
                     <div className="text-xs font-normal text-muted-foreground">
-                      ({c.min}–{c.max})
+                      {t('rangeHint', { min: c.min, max: c.max })}
                     </div>
                   </th>
                 ))}
-                <th className="py-2 font-semibold text-muted-foreground">Action</th>
+                <th className="py-2 font-semibold text-muted-foreground">{t('columnAction')}</th>
               </tr>
             </thead>
             <tbody>

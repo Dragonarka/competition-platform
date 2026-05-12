@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { usePublicSocket } from '@/hooks/use-public-socket';
 import type { PublicBracketData } from '@competition-platform/shared';
@@ -11,18 +12,13 @@ const STATUS_COLORS: Record<string, string> = {
   disconnected: 'bg-red-500',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  connected: 'Live',
-  reconnecting: 'Reconnecting...',
-  disconnected: 'Offline',
-};
-
 interface BracketClientIslandProps {
   competitionId: string;
   initialBracket: PublicBracketData;
 }
 
 export function BracketClientIsland({ competitionId, initialBracket }: BracketClientIslandProps) {
+  const t = useTranslations('PublicBracket');
   const utils = trpc.useUtils();
 
   const { data: bracket = initialBracket } = trpc.tournament.getPublicBracket.useQuery(
@@ -47,6 +43,12 @@ export function BracketClientIsland({ competitionId, initialBracket }: BracketCl
   });
 
   const stale = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
+  const statusLabel: string =
+    connectionStatus === 'connected'
+      ? t('statusConnected')
+      : connectionStatus === 'reconnecting'
+        ? t('statusReconnecting')
+        : t('statusDisconnected');
 
   return (
     <main className="min-h-screen bg-background p-4 max-w-5xl mx-auto">
@@ -56,11 +58,11 @@ export function BracketClientIsland({ competitionId, initialBracket }: BracketCl
           className={`w-3 h-3 rounded-full ${STATUS_COLORS[connectionStatus] ?? 'bg-gray-400'}`}
         />
         <span className="text-xs text-muted-foreground" data-testid="connection-status-label">
-          {STATUS_LABELS[connectionStatus] ?? connectionStatus}
+          {statusLabel}
         </span>
       </div>
 
-      <h1 className="text-2xl font-bold mb-6">Battles Bracket</h1>
+      <h1 className="text-2xl font-bold mb-6">{t('pageTitle')}</h1>
 
       <div
         className={`transition-opacity ${stale ? 'opacity-60' : 'opacity-100'}`}

@@ -1,6 +1,27 @@
 'use client';
 import { useState } from 'react';
 
+export interface JudgeScoreInputLabels {
+  /** Label preceding the participant ID. */
+  idPrefix: string;
+  /** Suffix that follows each criterion label, e.g. " (0–10)". */
+  rangeFormat: (min: number, max: number) => string;
+  /** Error rendered when a criterion value is missing or outside range. */
+  outOfRange: (criterion: string, min: number, max: number) => string;
+  /** In-flight submit button text. */
+  submitting: string;
+  /** Idle submit button text. */
+  submit: string;
+}
+
+const DEFAULT_LABELS: JudgeScoreInputLabels = {
+  idPrefix: 'ID:',
+  rangeFormat: (min, max) => ` (${min}–${max})`,
+  outOfRange: (name, min, max) => `${name}: enter a value between ${min} and ${max}`,
+  submitting: 'Submitting...',
+  submit: 'Submit Score',
+};
+
 export interface JudgeScoreInputProps {
   competitorId: string;
   competitorName: string;
@@ -10,6 +31,12 @@ export interface JudgeScoreInputProps {
   onSubmit: (scores: Record<string, string>) => void | Promise<void>;
   onValuesChange?: (values: Record<string, string>) => void;
   disabled?: boolean;
+  /**
+   * User-facing strings supplied by the host. Optional with English-language
+   * defaults so existing tests and consumers render without explicit wiring.
+   * Production hosts pass translated strings.
+   */
+  labels?: Partial<JudgeScoreInputLabels>;
 }
 
 export function JudgeScoreInput({
@@ -20,7 +47,9 @@ export function JudgeScoreInput({
   onSubmit,
   onValuesChange,
   disabled = false,
+  labels,
 }: JudgeScoreInputProps) {
+  const l = { ...DEFAULT_LABELS, ...labels };
   const [values, setValues] = useState<Record<string, string>>(defaultValues);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +66,7 @@ export function JudgeScoreInput({
     for (const c of criteria) {
       const v = parseFloat(values[c.id] ?? '');
       if (isNaN(v) || v < c.min || v > c.max) {
-        setError(`${c.name}: enter a value between ${c.min} and ${c.max}`);
+        setError(l.outOfRange(c.name, c.min, c.max));
         return;
       }
     }
@@ -56,12 +85,15 @@ export function JudgeScoreInput({
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="mb-2">
         <p className="text-lg font-bold">{competitorName}</p>
-        <p className="text-sm text-muted-foreground">ID: {participantId}</p>
+        <p className="text-sm text-muted-foreground">
+          {l.idPrefix} {participantId}
+        </p>
       </div>
       {criteria.map((c) => (
         <div key={c.id} className="flex flex-col gap-1">
           <label htmlFor={c.id} className="font-medium text-sm">
-            {c.name} ({c.min}–{c.max})
+            {c.name}
+            {l.rangeFormat(c.min, c.max)}
           </label>
           <input
             id={c.id}
@@ -87,7 +119,7 @@ export function JudgeScoreInput({
         disabled={disabled || submitting}
         className="min-h-[56px] w-full rounded-md bg-primary text-primary-foreground font-bold text-lg disabled:opacity-50"
       >
-        {submitting ? 'Submitting...' : 'Submit Score'}
+        {submitting ? l.submitting : l.submit}
       </button>
     </form>
   );

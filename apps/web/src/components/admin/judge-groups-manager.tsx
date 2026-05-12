@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface JudgeGroupsManagerProps {
   competitionId: string;
@@ -28,6 +30,8 @@ interface JudgeGroupsFormProps {
 }
 
 function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
+  const t = useTranslations('JudgeGroups');
+  const tErr = useTranslations();
   const { data: participants } = trpc.tournament.listParticipants.useQuery({ competitionId });
   const utils = trpc.useUtils();
 
@@ -59,7 +63,8 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
       setTimeout(() => setSaved(false), 2000);
     },
     onError: (err) => {
-      setSaveError(err.message);
+      const key = getTrpcErrorI18nKey(err);
+      setSaveError(key ? tErr(key) : err.message);
     },
   });
 
@@ -69,7 +74,8 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
       setSaveError(null);
     },
     onError: (err) => {
-      setSaveError(err.message);
+      const key = getTrpcErrorI18nKey(err);
+      setSaveError(key ? tErr(key) : err.message);
     },
   });
 
@@ -96,8 +102,6 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError(null);
-    // In solo mode, judge counts and group count are forced to 1 — the
-    // organizer is the sole judge covering one group of all competitors.
     const effectiveCypherJudgeCount = soloModeEnabled ? 1 : cypherJudgeCount;
     const effectiveCypherGroupCount = soloModeEnabled ? 1 : cypherGroupCount;
     const effectiveBattlesJudgeCount = soloModeEnabled ? 1 : battlesJudgeCount;
@@ -107,7 +111,7 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
       typeof advancementThreshold !== 'number' ||
       typeof effectiveBattlesJudgeCount !== 'number'
     ) {
-      setSaveError('All fields are required');
+      setSaveError(t('allFieldsRequired'));
       return;
     }
     mutation.mutate({
@@ -124,7 +128,7 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
     <form onSubmit={handleSave} className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Solo Mode</CardTitle>
+          <CardTitle className="text-base">{t('soloModeTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           <label className="flex items-start gap-2 cursor-pointer">
@@ -140,31 +144,23 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
                 });
               }}
             />
-            <span className="text-sm">
-              I&apos;ll score directly as the organizer — no separate judges needed
-            </span>
+            <span className="text-sm">{t('soloModeCheckbox')}</span>
           </label>
-          {!isDraft && (
-            <p className="text-xs text-muted-foreground">
-              Solo mode can only be toggled before the competition starts.
-            </p>
-          )}
+          {!isDraft && <p className="text-xs text-muted-foreground">{t('soloModeLockedHint')}</p>}
           {soloModeEnabled && (
-            <p className="text-xs text-muted-foreground">
-              Judge counts are managed automatically in solo mode (1 organizer = 1 judge × 1 group).
-            </p>
+            <p className="text-xs text-muted-foreground">{t('soloModeAutoHint')}</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Cypher Phase</CardTitle>
+          <CardTitle className="text-base">{t('cypherPhaseTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="cypherJudgeCount">Total Judges</Label>
+              <Label htmlFor="cypherJudgeCount">{t('cypherTotalJudgesLabel')}</Label>
               <Input
                 id="cypherJudgeCount"
                 type="number"
@@ -176,7 +172,7 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cypherGroupCount">Number of Groups</Label>
+              <Label htmlFor="cypherGroupCount">{t('groupsLabel')}</Label>
               <Input
                 id="cypherGroupCount"
                 type="number"
@@ -190,12 +186,16 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
           </div>
           {validConfig && (
             <p className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded">
-              {cypherGroupCount} group(s) of {judgesPerGroup} judge(s)
               {participantsPerGroup !== null
-                ? ` — each judge evaluates ~${participantsPerGroup} participants`
-                : participantCount === 0
-                  ? ' — add participants to see distribution preview'
-                  : ''}
+                ? t('configPreview', {
+                    groups: cypherGroupCount as number,
+                    judges: judgesPerGroup,
+                    participants: participantsPerGroup,
+                  })
+                : t('configPreviewNoParticipants', {
+                    groups: cypherGroupCount as number,
+                    judges: judgesPerGroup,
+                  })}
             </p>
           )}
         </CardContent>
@@ -203,10 +203,10 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Advancement to Battles</CardTitle>
+          <CardTitle className="text-base">{t('advancementTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1.5">
-          <Label htmlFor="advancementThreshold">Top N Participants Advance</Label>
+          <Label htmlFor="advancementThreshold">{t('advancementTopNLabel')}</Label>
           <Input
             id="advancementThreshold"
             type="number"
@@ -215,19 +215,17 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
             onChange={(e) => setAdvancementThreshold(parseIntField(e.target.value))}
             disabled={mutation.isPending}
           />
-          <p className="text-xs text-muted-foreground">
-            The top N participants by Cypher score advance to the Battles bracket.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('advancementBattlesHint')}</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Battles Phase</CardTitle>
+          <CardTitle className="text-base">{t('battlesPhaseTitle')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="battlesJudgeCount">Total Judges (Battles)</Label>
+            <Label htmlFor="battlesJudgeCount">{t('battlesTotalJudgesLabel')}</Label>
             <Input
               id="battlesJudgeCount"
               type="number"
@@ -237,12 +235,10 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
               onChange={(e) => setBattlesJudgeCount(parseIntField(e.target.value))}
               disabled={mutation.isPending || soloModeEnabled}
             />
-            <p className="text-xs text-muted-foreground">
-              Configured independently from Cypher judges (FR8).
-            </p>
+            <p className="text-xs text-muted-foreground">{t('battlesTotalJudgesHint')}</p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="tieBreakingRule">Tie-breaking Rule</Label>
+            <Label htmlFor="tieBreakingRule">{t('tieRuleLabel')}</Label>
             <select
               id="tieBreakingRule"
               value={tieBreakingRule}
@@ -252,10 +248,8 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
               disabled={mutation.isPending}
               className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
             >
-              <option value="re_vote">Re-vote (judges vote again)</option>
-              <option value="organizer_decision">
-                Organizer Decision (organizer picks winner)
-              </option>
+              <option value="re_vote">{t('tieRuleRevote')}</option>
+              <option value="organizer_decision">{t('tieRuleOrganizer')}</option>
             </select>
           </div>
         </CardContent>
@@ -264,23 +258,24 @@ function JudgeGroupsForm({ competitionId, comp }: JudgeGroupsFormProps) {
       {saveError && <p className="text-sm text-destructive">{saveError}</p>}
 
       <Button type="submit" disabled={mutation.isPending}>
-        {mutation.isPending ? 'Saving...' : saved ? 'Saved ✓' : 'Save Configuration'}
+        {mutation.isPending ? t('saving') : saved ? t('savedConfirm') : t('saveButtonLabel')}
       </Button>
     </form>
   );
 }
 
 export function JudgeGroupsManager({ competitionId }: JudgeGroupsManagerProps) {
+  const t = useTranslations('JudgeGroups');
   const { data: comp, isLoading: compLoading } = trpc.tournament.getCompetition.useQuery({
     competitionId,
   });
 
   if (compLoading) {
-    return <p className="text-muted-foreground text-sm">Loading configuration...</p>;
+    return <p className="text-muted-foreground text-sm">{t('loadingConfig')}</p>;
   }
 
   if (!comp) {
-    return <p className="text-sm text-destructive">Competition not found.</p>;
+    return <p className="text-sm text-destructive">{t('competitionNotFound')}</p>;
   }
 
   return <JudgeGroupsForm key={comp.id} competitionId={competitionId} comp={comp} />;

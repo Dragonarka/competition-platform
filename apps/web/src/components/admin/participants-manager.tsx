@@ -1,17 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface ParticipantsManagerProps {
   competitionId: string;
 }
 
 export function ParticipantsManager({ competitionId }: ParticipantsManagerProps) {
+  const t = useTranslations('Participants');
+  const tCommon = useTranslations('Common');
+  const tErr = useTranslations();
   const [participantId, setParticipantId] = useState('');
   const [name, setName] = useState('');
   const [conflictError, setConflictError] = useState<string | null>(null);
@@ -39,7 +44,8 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
     },
     onError(err) {
       if (err.data?.code === 'CONFLICT') {
-        setConflictError(err.message);
+        const key = getTrpcErrorI18nKey(err);
+        setConflictError(key ? tErr(key) : err.message);
       }
     },
   });
@@ -50,7 +56,8 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
       setRemoveError(null);
     },
     onError(err) {
-      setRemoveError(err.message);
+      const key = getTrpcErrorI18nKey(err);
+      setRemoveError(key ? tErr(key) : err.message);
     },
   });
 
@@ -75,15 +82,17 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
     formatMutation.mutate({ competitionId, format: newFormat });
   }
 
+  const addErrorKey = getTrpcErrorI18nKey(addMutation.error);
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Participant Format</CardTitle>
+          <CardTitle>{t('formatTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-1">
-            <Label>Format</Label>
+            <Label>{t('formatLabel')}</Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -92,7 +101,7 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
                 onClick={() => handleFormatChange('individual')}
                 disabled={formatMutation.isPending || competitionQuery.isLoading}
               >
-                Individual
+                {t('formatIndividual')}
               </Button>
               <Button
                 type="button"
@@ -101,7 +110,7 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
                 onClick={() => handleFormatChange('pairs')}
                 disabled={formatMutation.isPending || competitionQuery.isLoading}
               >
-                Pairs
+                {t('formatPairs')}
               </Button>
             </div>
           </div>
@@ -110,15 +119,15 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
 
       <Card>
         <CardHeader>
-          <CardTitle>Participants</CardTitle>
+          <CardTitle>{t('title')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {participantsQuery.isLoading && (
-            <p className="text-sm text-muted-foreground">Loading participants...</p>
+            <p className="text-sm text-muted-foreground">{t('loading')}</p>
           )}
 
           {participantsQuery.data && participantsQuery.data.length === 0 && (
-            <p className="text-sm text-muted-foreground">No participants registered yet.</p>
+            <p className="text-sm text-muted-foreground">{t('empty')}</p>
           )}
 
           {participantsQuery.data && participantsQuery.data.length > 0 && (
@@ -139,7 +148,7 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
                     onClick={() => removeMutation.mutate({ competitorDbId: p.id })}
                     disabled={removeMutation.isPending}
                   >
-                    Remove
+                    {tCommon('remove')}
                   </Button>
                 </li>
               ))}
@@ -150,7 +159,7 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
 
           <form onSubmit={handleAdd} className="space-y-3 border-t pt-4">
             <div className="space-y-1">
-              <Label htmlFor="participant-id">Participant ID</Label>
+              <Label htmlFor="participant-id">{t('participantIdLabel')}</Label>
               <Input
                 id="participant-id"
                 value={participantId}
@@ -158,7 +167,7 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
                   setParticipantId(e.target.value);
                   setConflictError(null);
                 }}
-                placeholder="e.g. MC-001"
+                placeholder={t('participantIdPlaceholder')}
                 required
                 aria-describedby={conflictError ? 'pid-error' : undefined}
                 aria-invalid={!!conflictError}
@@ -171,22 +180,24 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="participant-name">Name</Label>
+              <Label htmlFor="participant-name">{t('nameLabel')}</Label>
               <Input
                 id="participant-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. DJ Sample"
+                placeholder={t('namePlaceholder')}
                 required
               />
             </div>
 
             <Button type="submit" disabled={addMutation.isPending}>
-              {addMutation.isPending ? 'Adding...' : 'Add Participant'}
+              {addMutation.isPending ? t('adding') : t('addCta')}
             </Button>
 
             {addMutation.error && !conflictError && (
-              <p className="text-sm text-destructive">{addMutation.error.message}</p>
+              <p className="text-sm text-destructive">
+                {addErrorKey ? tErr(addErrorKey) : addMutation.error.message}
+              </p>
             )}
           </form>
         </CardContent>

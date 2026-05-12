@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type {
   PublicBracketData,
   PublicBracketMatchup,
@@ -24,17 +25,18 @@ function CompetitorSlot({
   isBye: boolean;
   isChampionPath: boolean;
 }) {
+  const t = useTranslations('PublicBracket');
   if (!competitor && isBye) {
     return (
       <div className="flex items-center justify-between rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-        <span>BYE</span>
+        <span>{t('byeLabel')}</span>
       </div>
     );
   }
   if (!competitor) {
     return (
       <div className="flex items-center justify-between rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-        <span>TBD</span>
+        <span>{t('tbdLabel')}</span>
       </div>
     );
   }
@@ -56,8 +58,10 @@ function CompetitorSlot({
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
         <span>{competitor.participantId}</span>
-        {isWinner && <span className="text-green-700 dark:text-green-400">Winner</span>}
-        {isBye && !isWinner && <span className="text-blue-700 dark:text-blue-400">Bye</span>}
+        {isWinner && <span className="text-green-700 dark:text-green-400">{t('winnerBadge')}</span>}
+        {isBye && !isWinner && (
+          <span className="text-blue-700 dark:text-blue-400">{t('byeBadge')}</span>
+        )}
       </div>
     </div>
   );
@@ -72,6 +76,7 @@ function MatchupCard({
   index: number;
   championCompetitorId: string | null;
 }) {
+  const t = useTranslations('PublicBracket');
   const aIsWinner =
     matchup.winnerCompetitorId !== null && matchup.winnerCompetitorId === matchup.competitorAId;
   const bIsWinner =
@@ -86,7 +91,9 @@ function MatchupCard({
         isChampionPath ? 'border-green-500 dark:border-green-600' : 'border-border'
       }`}
     >
-      <p className="text-xs font-medium text-muted-foreground">Match {index + 1}</p>
+      <p className="text-xs font-medium text-muted-foreground">
+        {t('matchLabel', { n: index + 1 })}
+      </p>
       <CompetitorSlot
         competitor={matchup.competitorA}
         seed={matchup.seedA}
@@ -194,6 +201,8 @@ function HorizontalBracket({
 }
 
 export function BracketView({ bracket }: BracketViewProps) {
+  const t = useTranslations('PublicBracket');
+
   if (bracket.matchups.length === 0) {
     return (
       <div className="text-muted-foreground py-8 text-center" data-testid="bracket-empty">
@@ -201,7 +210,7 @@ export function BracketView({ bracket }: BracketViewProps) {
           className="mb-3 inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse"
           aria-hidden="true"
         />
-        <p>Bracket will appear when the Battles phase begins.</p>
+        <p>{t('emptyHint')}</p>
       </div>
     );
   }
@@ -234,20 +243,24 @@ export function BracketView({ bracket }: BracketViewProps) {
   }
 
   return (
-    <div role="region" aria-label="Tournament bracket">
+    <div role="region" aria-label={t('bracketAriaLabel')}>
       {bracket.championCompetitorId && (
         <div
           data-testid="bracket-champion"
           className="rounded-md border border-yellow-500/40 bg-yellow-50 px-4 py-3 text-sm font-semibold text-yellow-900 dark:bg-yellow-950/20 dark:text-yellow-200 mb-6"
         >
-          Champion: {championName ?? bracket.championCompetitorId}
-          {championSeed !== null && ` (Seed ${championSeed})`}
+          {championSeed !== null
+            ? t('championWithSeed', {
+                name: championName ?? bracket.championCompetitorId,
+                seed: championSeed,
+              })
+            : t('championBanner', { name: championName ?? bracket.championCompetitorId })}
         </div>
       )}
 
       {bracket.currentRoundNumber !== null && (
         <p className="text-xs text-muted-foreground mb-4">
-          Current round: {roundLabel(bracket.currentRoundNumber, totalRounds)}
+          {t('currentRound', { round: roundLabel(bracket.currentRoundNumber, totalRounds) })}
         </p>
       )}
 

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { JudgeVoteInput } from '@competition-platform/format-cypher-battles';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface SimulationBattlesPanelProps {
   competitionId: string;
@@ -36,6 +38,9 @@ function SimMatchupCard({
   competitorBSeed,
   simulatedJudgeIndex,
 }: MatchupCardProps) {
+  const t = useTranslations('Simulation.panels.battles');
+  const tJudge = useTranslations('Judge');
+  const tErr = useTranslations();
   const utils = trpc.useUtils();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -46,7 +51,10 @@ function SimMatchupCard({
       setSuccess(true);
       void utils.tournament.getBracket.invalidate({ competitionId });
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
   async function handleVote(choice: 'player1' | 'player2' | 'tie') {
@@ -66,11 +74,11 @@ function SimMatchupCard({
   return (
     <div className="rounded-md border border-border bg-card p-4 space-y-3">
       <p className="text-xs font-medium text-muted-foreground">
-        Round {roundNumber} · Match {bracketPosition + 1}
+        {t('matchupHeaderFmt', { round: roundNumber, match: bracketPosition + 1 })}
       </p>
       {success ? (
         <p className="text-sm font-semibold text-green-600">
-          Vote recorded as Judge {simulatedJudgeIndex + 1} ✓
+          {t('voteRecordedAsJudge', { n: simulatedJudgeIndex + 1 })}
         </p>
       ) : (
         <JudgeVoteInput
@@ -83,6 +91,13 @@ function SimMatchupCard({
           player2Seed={competitorBSeed}
           onVote={handleVote}
           disabled={mutation.isPending}
+          labels={{
+            seed: (n) => tJudge('seed', { n }),
+            submitting: tJudge('voteSubmitting'),
+            voteForPlayer1: tJudge('voteForA', { name: competitorAName }),
+            voteForPlayer2: tJudge('voteForB', { name: competitorBName }),
+            voteTie: tJudge('voteTie'),
+          }}
         />
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -91,6 +106,7 @@ function SimMatchupCard({
 }
 
 export function SimulationBattlesPanel({ competitionId }: SimulationBattlesPanelProps) {
+  const t = useTranslations('Simulation.panels.battles');
   const { data: competition } = trpc.tournament.getCompetition.useQuery({ competitionId });
   const { data: bracket } = trpc.tournament.getBracket.useQuery(
     { competitionId },
@@ -112,22 +128,20 @@ export function SimulationBattlesPanel({ competitionId }: SimulationBattlesPanel
       <CardHeader>
         <div className="flex items-end justify-between gap-3">
           <div>
-            <CardTitle className="text-base">Simulation Battles Voting</CardTitle>
-            <CardDescription>
-              Cast {judgeCount} votes per matchup — one as each judge.
-            </CardDescription>
+            <CardTitle className="text-base">{t('panelTitle')}</CardTitle>
+            <CardDescription>{t('panelDesc', { count: judgeCount })}</CardDescription>
           </div>
           <label className="flex flex-col text-xs text-muted-foreground">
-            Judge
+            {t('judgeSelectorLabel')}
             <select
-              aria-label="Judge slot"
+              aria-label={t('judgeSelectorAria')}
               className="rounded-md border border-input bg-background px-2 py-1 text-sm"
               value={selectedJudge}
               onChange={(e) => setSelectedJudge(parseInt(e.target.value, 10))}
             >
               {Array.from({ length: judgeCount }, (_, j) => (
                 <option key={j} value={j}>
-                  Judge {j + 1}
+                  {t('judgeOption', { n: j + 1 })}
                 </option>
               ))}
             </select>
@@ -136,9 +150,7 @@ export function SimulationBattlesPanel({ competitionId }: SimulationBattlesPanel
       </CardHeader>
       <CardContent className="space-y-4">
         {open.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            All matchups in this round are voted on. Waiting for the next round to be materialised.
-          </p>
+          <p className="text-sm text-muted-foreground">{t('allVoted')}</p>
         ) : (
           open.map((m) => (
             <SimMatchupCard

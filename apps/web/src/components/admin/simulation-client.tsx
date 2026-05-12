@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@clerk/nextjs';
+import { Link, useRouter } from '@/i18n/navigation';
 import { trpc } from '@/lib/trpc';
 import { buttonVariants } from '@/components/ui/button';
 import { useAdminSocket } from '@/hooks/use-admin-socket';
@@ -21,6 +21,7 @@ interface SimulationClientProps {
 }
 
 export function SimulationClient({ competitionId }: SimulationClientProps) {
+  const t = useTranslations('Simulation');
   const { data: competition, isLoading } = trpc.tournament.getCompetition.useQuery({
     competitionId,
   });
@@ -40,8 +41,8 @@ export function SimulationClient({ competitionId }: SimulationClientProps) {
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     let cancelled = false;
-    void getToken().then((t) => {
-      if (!cancelled) setClerkToken(t);
+    void getToken().then((tok) => {
+      if (!cancelled) setClerkToken(tok);
     });
     return () => {
       cancelled = true;
@@ -59,21 +60,20 @@ export function SimulationClient({ competitionId }: SimulationClientProps) {
   });
 
   if (isLoading) {
-    return <p className="text-muted-foreground text-sm">Loading simulation…</p>;
+    return <p className="text-muted-foreground text-sm">{t('loadingSimulation')}</p>;
   }
   if (!competition) {
-    return <p className="text-destructive text-sm">Competition not found.</p>;
+    return <p className="text-destructive text-sm">{t('competitionNotFound')}</p>;
   }
   if (!competition.isSimulation) {
-    // Redirect in flight via the effect above.
     return null;
   }
 
   const phaseLabel: string = (() => {
-    if (competition.status === 'draft') return 'Setup';
-    if (competition.status === 'active' && !competition.cypherCompletedAt) return 'Cypher';
-    if (competition.status === 'active' && competition.cypherCompletedAt) return 'Battles';
-    if (competition.status === 'completed') return 'Completed';
+    if (competition.status === 'draft') return t('phaseSetup');
+    if (competition.status === 'active' && !competition.cypherCompletedAt) return t('phaseCypher');
+    if (competition.status === 'active' && competition.cypherCompletedAt) return t('phaseBattles');
+    if (competition.status === 'completed') return t('phaseCompleted');
     return competition.status;
   })();
 
@@ -83,22 +83,20 @@ export function SimulationClient({ competitionId }: SimulationClientProps) {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700">
-              SIMULATION
+              {t('badge')}
             </span>
             <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
               {phaseLabel}
             </span>
           </div>
           <h1 className="text-xl font-semibold text-foreground">{competition.name}</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Run the full Cypher → Battles flow as all roles. Real-time events fire normally.
-          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t('bannerHint')}</p>
         </div>
         <Link
           href={`/competitions/${competitionId}`}
           className={buttonVariants({ variant: 'outline', size: 'sm' })}
         >
-          Settings
+          {t('settingsLink')}
         </Link>
       </div>
 

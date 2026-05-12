@@ -1,7 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { NextIntlClientProvider, useTranslations } from 'next-intl';
+
+// This spec needs the REAL next-intl runtime (it's proving the missing-key
+// fallback behavior end-to-end). The default test-setup mocks next-intl with
+// a passthrough so most component specs don't need to wire a provider; unmock
+// it here before importing the real symbols.
+vi.unmock('next-intl');
+const { NextIntlClientProvider, useTranslations } =
+  await vi.importActual<typeof import('next-intl')>('next-intl');
 
 // Component-level proof of AC #3: when a key is missing, the UI renders the
 // key path as a safe fallback and a console warning fires — no crash.

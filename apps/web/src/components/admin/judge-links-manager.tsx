@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useFormatter, useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface GeneratedLink {
   id: string;
@@ -15,6 +17,9 @@ interface GeneratedLink {
 }
 
 export function JudgeLinksManager({ competitionId }: { competitionId: string }) {
+  const t = useTranslations('JudgeLinks');
+  const tErr = useTranslations();
+  const format = useFormatter();
   const { data: links, isLoading } = trpc.tournament.listJudgeLinks.useQuery({ competitionId });
   const utils = trpc.useUtils();
   const [count, setCount] = useState<number | ''>(3);
@@ -36,12 +41,18 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
       utils.tournament.listJudgeLinks.invalidate({ competitionId });
       setError(null);
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
   const revokeMutation = trpc.tournament.revokeJudgeLink.useMutation({
     onSuccess: () => utils.tournament.listJudgeLinks.invalidate({ competitionId }),
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
   const handleCopy = (id: string, url: string) => {
@@ -51,7 +62,7 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
         setCopiedId(id);
         setTimeout(() => setCopiedId(null), 2000);
       })
-      .catch(() => setError('Failed to copy to clipboard'));
+      .catch(() => setError(t('copyFailed')));
   };
 
   const handleGenerate = (e: React.FormEvent) => {
@@ -62,19 +73,15 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
     generateMutation.mutate({ competitionId, count });
   };
 
-  if (isLoading) return <p className="text-muted-foreground text-sm">Loading judge links...</p>;
+  if (isLoading) return <p className="text-muted-foreground text-sm">{t('loading')}</p>;
 
   return (
     <div className="space-y-6">
       {generatedLinks && (
         <Card className="border-primary">
           <CardHeader>
-            <CardTitle className="text-base text-primary">
-              New Links Generated — Save These Now
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              These links can only be seen once. Copy them before leaving this page.
-            </p>
+            <CardTitle className="text-base text-primary">{t('newLinksTitle')}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t('newLinksHint')}</p>
           </CardHeader>
           <CardContent className="space-y-2">
             {generatedLinks.map((link) => (
@@ -84,7 +91,7 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
                   {link.url}
                 </code>
                 <Button size="sm" variant="outline" onClick={() => handleCopy(link.id, link.url)}>
-                  {copiedId === link.id ? 'Copied' : 'Copy'}
+                  {copiedId === link.id ? t('copiedShort') : t('copyShort')}
                 </Button>
               </div>
             ))}
@@ -94,12 +101,12 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Generate New Judge Links</CardTitle>
+          <CardTitle className="text-base">{t('generateTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleGenerate} className="flex items-end gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="linkCount">Number of Links</Label>
+              <Label htmlFor="linkCount">{t('linkCountLabel')}</Label>
               <Input
                 id="linkCount"
                 type="number"
@@ -118,7 +125,7 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
               type="submit"
               disabled={generateMutation.isPending || typeof count !== 'number'}
             >
-              {generateMutation.isPending ? 'Generating...' : 'Generate Links'}
+              {generateMutation.isPending ? t('generating') : t('generateCta')}
             </Button>
           </form>
           {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
@@ -127,11 +134,13 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Active Judge Links ({links?.length ?? 0})</CardTitle>
+          <CardTitle className="text-base">
+            {t('activeLinksTitle', { count: links?.length ?? 0 })}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {!links?.length ? (
-            <p className="text-sm text-muted-foreground">No judge links generated yet.</p>
+            <p className="text-sm text-muted-foreground">{t('noActiveLinks')}</p>
           ) : (
             <ul className="space-y-2">
               {links.map((link) => (
@@ -141,7 +150,9 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
                 >
                   <span className="text-sm font-medium">{link.label}</span>
                   <span className="text-xs text-muted-foreground mr-auto ml-3">
-                    Created {new Date(link.createdAt).toLocaleDateString()}
+                    {t('createdOn', {
+                      date: format.dateTime(new Date(link.createdAt), { dateStyle: 'medium' }),
+                    })}
                   </span>
                   <Button
                     size="sm"
@@ -150,7 +161,7 @@ export function JudgeLinksManager({ competitionId }: { competitionId: string }) 
                     onClick={() => revokeMutation.mutate({ judgeSessionId: link.id })}
                     disabled={revokeMutation.isPending}
                   >
-                    Revoke
+                    {t('revoke')}
                   </Button>
                 </li>
               ))}

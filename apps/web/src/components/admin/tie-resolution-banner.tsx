@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface TieResolutionBannerProps {
   competitionId: string;
@@ -26,6 +28,8 @@ function PendingMatchupCard({
   competitionId: string;
   matchup: PendingMatchup;
 }) {
+  const t = useTranslations('TieResolution');
+  const tErr = useTranslations();
   const utils = trpc.useUtils();
   const [winnerId, setWinnerId] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -36,7 +40,10 @@ function PendingMatchupCard({
       setError(null);
       void utils.tournament.getBracket.invalidate({ competitionId });
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
   const trimmedReason = reason.trim();
@@ -59,8 +66,7 @@ function PendingMatchupCard({
   return (
     <div className="space-y-3 rounded-md border border-amber-500/40 bg-amber-50 p-4 dark:bg-amber-950/20">
       <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-        Tie requires your decision · Round {matchup.roundNumber} · Match{' '}
-        {matchup.bracketPosition + 1}
+        {t('banner', { round: matchup.roundNumber, match: matchup.bracketPosition + 1 })}
       </p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {matchup.competitorAId && matchup.competitorA && (
@@ -99,15 +105,17 @@ function PendingMatchupCard({
       <textarea
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        placeholder="Reason (4–280 characters) — recorded in the audit trail."
+        placeholder={t('reasonInputPlaceholder')}
         rows={2}
         className="w-full rounded border border-border bg-background p-2 text-sm"
         maxLength={280}
       />
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">{trimmedReason.length}/280</span>
+        <span className="text-xs text-muted-foreground">
+          {t('charCount', { count: trimmedReason.length })}
+        </span>
         <Button type="button" onClick={handleSubmit} disabled={!submittable} size="sm">
-          {mutation.isPending ? 'Resolving…' : 'Confirm winner'}
+          {mutation.isPending ? t('resolvingProgress') : t('confirmWinner')}
         </Button>
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}

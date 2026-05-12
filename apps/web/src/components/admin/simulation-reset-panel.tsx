@@ -1,15 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import { useFormatter, useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import type { SimulationResetPayload } from '@competition-platform/shared';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface SimulationResetPanelProps {
   competitionId: string;
 }
 
 export function SimulationResetPanel({ competitionId }: SimulationResetPanelProps) {
+  const t = useTranslations('Simulation.panels.reset');
+  const tErr = useTranslations();
+  const format = useFormatter();
   const utils = trpc.useUtils();
   const { data: competition } = trpc.tournament.getCompetition.useQuery({ competitionId });
   const [confirming, setConfirming] = useState(false);
@@ -28,7 +33,10 @@ export function SimulationResetPanel({ competitionId }: SimulationResetPanelProp
       void utils.tournament.getDashboardSnapshot.invalidate({ competitionId });
       void utils.tournament.listSimulationResetEvents.invalidate({ competitionId });
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
   if (!competition || !competition.isSimulation) return null;
@@ -36,23 +44,26 @@ export function SimulationResetPanel({ competitionId }: SimulationResetPanelProp
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <div>
-        <h2 className="text-base font-semibold">Reset Simulation</h2>
-        <p className="text-sm text-muted-foreground">
-          Wipes all scores, votes, and bracket progress for this simulation. Mock participants,
-          evaluation criteria, and judge links are kept.
-        </p>
+        <h2 className="text-base font-semibold">{t('cardTitle')}</h2>
+        <p className="text-sm text-muted-foreground">{t('cardDesc')}</p>
       </div>
 
       {!confirming && (
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setConfirming(true)}>
-            Reset Simulation
+            {t('resetCta')}
           </Button>
           {lastResult && (
             <span className="text-xs text-muted-foreground">
-              Last reset: {new Date(lastResult.resetAt).toLocaleString()} —{' '}
-              {lastResult.scoresDeleted} scores, {lastResult.votesDeleted} votes,{' '}
-              {lastResult.matchupsDeleted} matchups removed.
+              {t('lastResetSummary', {
+                time: format.dateTime(new Date(lastResult.resetAt), {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }),
+                scores: lastResult.scoresDeleted,
+                votes: lastResult.votesDeleted,
+                matchups: lastResult.matchupsDeleted,
+              })}
             </span>
           )}
         </div>
@@ -60,16 +71,14 @@ export function SimulationResetPanel({ competitionId }: SimulationResetPanelProp
 
       {confirming && (
         <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
-          <p className="text-sm font-medium text-destructive">
-            This cannot be undone. All run-state data will be deleted.
-          </p>
+          <p className="text-sm font-medium text-destructive">{t('confirmWarning')}</p>
           <div className="flex items-center gap-2">
             <Button
               variant="destructive"
               onClick={() => mutation.mutate({ competitionId })}
               disabled={mutation.isPending}
             >
-              {mutation.isPending ? 'Resetting…' : 'Confirm Reset'}
+              {mutation.isPending ? t('resetting') : t('confirmCta')}
             </Button>
             <Button
               variant="outline"
@@ -79,7 +88,7 @@ export function SimulationResetPanel({ competitionId }: SimulationResetPanelProp
               }}
               disabled={mutation.isPending}
             >
-              Cancel
+              {t('cancel')}
             </Button>
           </div>
         </div>

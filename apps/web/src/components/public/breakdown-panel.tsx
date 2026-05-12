@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { CriterionBreakdownPublic, GroupBreakdownPublic } from '@competition-platform/shared';
 
 interface BreakdownPanelProps {
@@ -8,6 +9,7 @@ interface BreakdownPanelProps {
 }
 
 export function BreakdownPanel({ criteriaBreakdown, groupBreakdown }: BreakdownPanelProps) {
+  const t = useTranslations('PublicStandings');
   const hasCriteria = (criteriaBreakdown?.length ?? 0) > 0;
   const hasGroups = (groupBreakdown?.length ?? 0) > 0;
   if (!hasCriteria && !hasGroups) return null;
@@ -17,7 +19,7 @@ export function BreakdownPanel({ criteriaBreakdown, groupBreakdown }: BreakdownP
       {hasCriteria && (
         <section data-testid="breakdown-criteria">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-            Per criterion
+            {t('perCriterion')}
           </h4>
           <ul className="space-y-1">
             {criteriaBreakdown!.map((c) => (
@@ -35,7 +37,7 @@ export function BreakdownPanel({ criteriaBreakdown, groupBreakdown }: BreakdownP
       {hasGroups && (
         <section data-testid="breakdown-groups">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-            Per judge group
+            {t('perJudgeGroup')}
           </h4>
           <ul className="space-y-1">
             {groupBreakdown!.map((g) => (

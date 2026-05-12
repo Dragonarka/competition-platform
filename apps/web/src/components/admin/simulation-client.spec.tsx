@@ -27,6 +27,15 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: replaceMock }),
 }));
 
+// SimulationClient was migrated to use `useRouter` from `@/i18n/navigation`
+// (locale-aware). Override the global test-setup mock so this spec keeps
+// asserting on `replaceMock` for the cross-locale redirect call.
+vi.mock('@/i18n/navigation', () => ({
+  Link: ({ children, href }: { children: React.ReactNode; href: string }) =>
+    createElement('a', { href }, children),
+  useRouter: () => ({ replace: replaceMock, push: vi.fn(), back: vi.fn() }),
+}));
+
 vi.mock('@clerk/nextjs', () => ({
   useAuth: () => ({
     isLoaded: true,

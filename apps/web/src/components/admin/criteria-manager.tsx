@@ -1,17 +1,22 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface CriteriaManagerProps {
   competitionId: string;
 }
 
 export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
+  const t = useTranslations('Criteria');
+  const tCommon = useTranslations('Common');
+  const tErr = useTranslations();
   const [name, setName] = useState('');
   const [minScore, setMinScore] = useState('0');
   const [maxScore, setMaxScore] = useState('10');
@@ -57,7 +62,7 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
     const max = parseFloat(maxScore);
 
     if (isNaN(min) || isNaN(max) || min >= max) {
-      setMinError('Minimum must be less than maximum');
+      setMinError(t('minError'));
       return;
     }
 
@@ -77,19 +82,21 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
     });
   }
 
+  const addErrorKey = getTrpcErrorI18nKey(addMutation.error);
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Evaluation Criteria</CardTitle>
+          <CardTitle>{t('title')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           {criteriaQuery.isLoading && (
-            <p className="text-sm text-muted-foreground">Loading criteria...</p>
+            <p className="text-sm text-muted-foreground">{t('loading')}</p>
           )}
 
           {criteriaQuery.data && criteriaQuery.data.length === 0 && (
-            <p className="text-sm text-muted-foreground">No criteria defined yet.</p>
+            <p className="text-sm text-muted-foreground">{t('empty')}</p>
           )}
 
           {criteriaQuery.data && criteriaQuery.data.length > 0 && (
@@ -112,7 +119,7 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
                     onClick={() => removeMutation.mutate({ criterionId: criterion.id })}
                     disabled={removeMutation.isPending}
                   >
-                    Remove
+                    {tCommon('remove')}
                   </Button>
                 </li>
               ))}
@@ -121,19 +128,19 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
 
           <form onSubmit={handleAddSubmit} className="space-y-3 border-t pt-4">
             <div className="space-y-1">
-              <Label htmlFor="criterion-name">Criterion Name</Label>
+              <Label htmlFor="criterion-name">{t('nameLabel')}</Label>
               <Input
                 id="criterion-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Musicality"
+                placeholder={t('namePlaceholder')}
                 required
               />
             </div>
 
             <div className="flex gap-3">
               <div className="flex-1 space-y-1">
-                <Label htmlFor="min-score">Min Score</Label>
+                <Label htmlFor="min-score">{t('minLabel')}</Label>
                 <Input
                   id="min-score"
                   type="number"
@@ -155,7 +162,7 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
               </div>
 
               <div className="flex-1 space-y-1">
-                <Label htmlFor="max-score">Max Score</Label>
+                <Label htmlFor="max-score">{t('maxLabel')}</Label>
                 <Input
                   id="max-score"
                   type="number"
@@ -168,11 +175,13 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
             </div>
 
             <Button type="submit" disabled={addMutation.isPending}>
-              {addMutation.isPending ? 'Adding...' : 'Add Criterion'}
+              {addMutation.isPending ? t('adding') : t('addCta')}
             </Button>
 
             {addMutation.error && (
-              <p className="text-sm text-destructive">{addMutation.error.message}</p>
+              <p className="text-sm text-destructive">
+                {addErrorKey ? tErr(addErrorKey) : addMutation.error.message}
+              </p>
             )}
           </form>
         </CardContent>
@@ -181,18 +190,18 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
       {availableTemplates && availableTemplates.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Copy from Template</CardTitle>
+            <CardTitle>{t('copyTemplate')}</CardTitle>
           </CardHeader>
           <CardContent className="flex items-end gap-3">
             <div className="flex-1 space-y-1">
-              <Label htmlFor="template-select">Source Competition</Label>
+              <Label htmlFor="template-select">{t('sourceCompetition')}</Label>
               <select
                 id="template-select"
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
               >
-                <option value="">Select a competition...</option>
+                <option value="">{t('selectPlaceholder')}</option>
                 {availableTemplates.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
@@ -205,7 +214,7 @@ export function CriteriaManager({ competitionId }: CriteriaManagerProps) {
               onClick={handleCopyTemplate}
               disabled={!selectedTemplate || copyMutation.isPending}
             >
-              {copyMutation.isPending ? 'Copying...' : 'Copy Template'}
+              {copyMutation.isPending ? t('copying') : t('copyCta')}
             </Button>
           </CardContent>
         </Card>

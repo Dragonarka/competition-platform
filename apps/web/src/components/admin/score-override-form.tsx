@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface CriterionDef {
   id: string;
@@ -37,6 +39,8 @@ export function ScoreOverrideForm({
   onCancel,
   onSuccess,
 }: ScoreOverrideFormProps) {
+  const t = useTranslations('ScoreOverride');
+  const tErr = useTranslations();
   const [values, setValues] = useState<Record<string, string>>({ ...currentScores });
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +52,12 @@ export function ScoreOverrideForm({
       void utils.tournament.getStandings.invalidate();
       onSuccess();
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
-  // Derive Save-disabled state directly from inputs (no useEffect / mirrored state).
   const allValuesValid = criteria.every((c) => isValidValue(values[c.id] ?? '', c));
   const reasonOk = reason.trim().length > 0 && reason.trim().length <= 500;
   const canSave = allValuesValid && reasonOk && !overrideMutation.isPending;
@@ -74,12 +80,10 @@ export function ScoreOverrideForm({
     >
       <div>
         <p className="text-sm font-medium">
-          Override score: <strong>{competitorName}</strong>{' '}
-          <span className="text-muted-foreground">by {judgeLabel}</span>
+          {t('formHeader')} <strong>{competitorName}</strong>{' '}
+          <span className="text-muted-foreground">{t('formByJudge', { judge: judgeLabel })}</span>
         </p>
-        <p className="text-xs text-muted-foreground">
-          Overrides use the current evaluation criteria configuration.
-        </p>
+        <p className="text-xs text-muted-foreground">{t('formHint')}</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -88,7 +92,7 @@ export function ScoreOverrideForm({
             <span className="font-medium">
               {c.name}{' '}
               <span className="text-xs text-muted-foreground">
-                ({c.min.toFixed(2)}–{c.max.toFixed(2)})
+                {t('criterionRange', { min: c.min.toFixed(2), max: c.max.toFixed(2) })}
               </span>
             </span>
             <input
@@ -106,7 +110,7 @@ export function ScoreOverrideForm({
 
       <label className="flex flex-col gap-1 text-sm">
         <span className="font-medium">
-          Reason <span className="text-destructive">*</span>
+          {t('reasonRequired')} <span className="text-destructive">*</span>
         </span>
         <textarea
           value={reason}
@@ -115,9 +119,11 @@ export function ScoreOverrideForm({
           maxLength={500}
           required
           className="border border-input rounded px-2 py-1 text-sm"
-          placeholder="Why is this score being modified?"
+          placeholder={t('reasonInputPlaceholder')}
         />
-        <span className="text-xs text-muted-foreground">{reason.trim().length}/500</span>
+        <span className="text-xs text-muted-foreground">
+          {t('charCount', { count: reason.trim().length })}
+        </span>
       </label>
 
       {error && (
@@ -126,7 +132,7 @@ export function ScoreOverrideForm({
 
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={!canSave}>
-          {overrideMutation.isPending ? 'Saving...' : 'Save override'}
+          {overrideMutation.isPending ? t('saveOverrideProgress') : t('saveOverride')}
         </Button>
         <Button
           type="button"
@@ -134,7 +140,7 @@ export function ScoreOverrideForm({
           onClick={onCancel}
           disabled={overrideMutation.isPending}
         >
-          Cancel
+          {t('cancel')}
         </Button>
       </div>
     </form>

@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { JudgeVoteInput } from '@competition-platform/format-cypher-battles';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface BattlesVotingPanelProps {
   competitionId: string;
@@ -34,6 +36,9 @@ function MatchupCard({
   competitorBName,
   competitorBSeed,
 }: MatchupCardProps) {
+  const t = useTranslations('BattlesVoting');
+  const tJudge = useTranslations('Judge');
+  const tErr = useTranslations();
   const utils = trpc.useUtils();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -45,7 +50,8 @@ function MatchupCard({
       void utils.tournament.getBracket.invalidate({ competitionId });
     },
     onError: (err) => {
-      setError(err.message);
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
     },
   });
 
@@ -65,10 +71,10 @@ function MatchupCard({
   return (
     <div className="rounded-md border border-border bg-card p-4 space-y-3">
       <p className="text-xs font-medium text-muted-foreground">
-        Round {roundNumber} · Match {bracketPosition + 1}
+        {t('matchupHeader', { round: roundNumber, match: bracketPosition + 1 })}
       </p>
       {success ? (
-        <p className="text-sm font-semibold text-green-600">Vote recorded ✓</p>
+        <p className="text-sm font-semibold text-green-600">{t('voteRecorded')}</p>
       ) : (
         <JudgeVoteInput
           matchupId={matchupId}
@@ -80,6 +86,13 @@ function MatchupCard({
           player2Seed={competitorBSeed}
           onVote={handleVote}
           disabled={mutation.isPending}
+          labels={{
+            seed: (n) => tJudge('seed', { n }),
+            submitting: tJudge('voteSubmitting'),
+            voteForPlayer1: tJudge('voteForA', { name: competitorAName }),
+            voteForPlayer2: tJudge('voteForB', { name: competitorBName }),
+            voteTie: tJudge('voteTie'),
+          }}
         />
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -88,6 +101,7 @@ function MatchupCard({
 }
 
 export function BattlesVotingPanel({ competitionId }: BattlesVotingPanelProps) {
+  const t = useTranslations('BattlesVoting');
   const { data: competition } = trpc.tournament.getCompetition.useQuery({
     competitionId,
   });
@@ -108,16 +122,12 @@ export function BattlesVotingPanel({ competitionId }: BattlesVotingPanelProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Solo Battles Voting</CardTitle>
-        <CardDescription>
-          Vote on each open matchup. Bye matchups auto-advance and aren&apos;t shown here.
-        </CardDescription>
+        <CardTitle className="text-base">{t('soloCardTitle')}</CardTitle>
+        <CardDescription>{t('soloCardDesc')}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {open.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            All matchups in this round are voted on. Waiting for the next round to be materialised.
-          </p>
+          <p className="text-sm text-muted-foreground">{t('allVoted')}</p>
         ) : (
           open.map((m) => (
             <MatchupCard

@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useFormatter, useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 
 interface CriterionInfo {
@@ -13,16 +14,18 @@ interface AuditTrailPanelProps {
   criteria: CriterionInfo[];
 }
 
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-}
-
 export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
+  const t = useTranslations('ScoreOverride');
+  const format = useFormatter();
   const nameMap = useMemo(() => new Map(criteria.map((c) => [c.id, c.name])), [criteria]);
+
+  function formatDateTime(iso: string): string {
+    try {
+      return format.dateTime(new Date(iso), { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return iso;
+    }
+  }
 
   const {
     data: trail,
@@ -31,7 +34,7 @@ export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
   } = trpc.tournament.getScoreAuditTrail.useQuery({ scoreId }, { enabled: Boolean(scoreId) });
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading audit trail...</p>;
+    return <p className="text-sm text-muted-foreground">{t('auditPanelLoading')}</p>;
   }
 
   if (error) {
@@ -48,11 +51,13 @@ export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">{trail.competitorName}</h2>
-        <p className="text-sm text-muted-foreground">Score from {trail.judgeLabel}</p>
+        <p className="text-sm text-muted-foreground">
+          {t('auditPanelScoreFrom', { judge: trail.judgeLabel })}
+        </p>
       </div>
 
       {trail.chain.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No events found for this score.</p>
+        <p className="text-sm text-muted-foreground">{t('auditNoEvents')}</p>
       ) : (
         <ol className="space-y-4 border-l-2 border-border pl-6 ml-2">
           {trail.chain.map((entry) => {
@@ -62,10 +67,13 @@ export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
                   <span className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-green-500 ring-4 ring-background" />
                   <div className="space-y-1">
                     <p className="text-sm font-semibold text-green-700 dark:text-green-400">
-                      Submitted
+                      {t('auditSubmitted')}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatDateTime(entry.createdAt)} &middot; sequence #{entry.sequence}
+                      {t('auditSequence', {
+                        time: formatDateTime(entry.createdAt),
+                        sequence: entry.sequence,
+                      })}
                     </p>
                     <table className="text-xs mt-2">
                       <tbody>
@@ -78,7 +86,7 @@ export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
                           </tr>
                         ))}
                         <tr className="border-t border-border">
-                          <td className="pt-1 pr-3 font-semibold">Total</td>
+                          <td className="pt-1 pr-3 font-semibold">{t('auditTotal')}</td>
                           <td className="pt-1 font-mono font-bold">{entry.totalScore}</td>
                         </tr>
                       </tbody>
@@ -92,17 +100,17 @@ export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
                 <span className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-amber-500 ring-4 ring-background" />
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                    Overridden
+                    {t('auditOverridden')}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {formatDateTime(entry.createdAt)} &middot; sequence #{entry.sequence}
+                    {t('auditSequence', {
+                      time: formatDateTime(entry.createdAt),
+                      sequence: entry.sequence,
+                    })}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {/* TODO(post-MVP): resolve overriddenByClerkId to organizer
-                        name/email via clerkClient.users.getUser() — add a
-                        getOrganizerProfile tRPC query with 5-min cache. Out of
-                        scope for Story 4.2. */}
-                    by <span className="font-mono">{entry.overriddenByClerkId}</span>
+                    {t('auditOverriddenBy')}{' '}
+                    <span className="font-mono">{entry.overriddenByClerkId}</span>
                   </p>
                   <p className="text-sm">
                     <span className="font-mono">{entry.originalTotalScore}</span>
@@ -114,11 +122,11 @@ export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
                   </blockquote>
                   <details className="mt-2">
                     <summary className="text-xs cursor-pointer text-muted-foreground">
-                      Show criteria diff
+                      {t('auditShowDiff')}
                     </summary>
                     <div className="grid grid-cols-2 gap-3 mt-2 text-xs">
                       <div>
-                        <p className="font-semibold mb-1">Original</p>
+                        <p className="font-semibold mb-1">{t('auditOriginalHeader')}</p>
                         <table>
                           <tbody>
                             {entry.originalCriteriaScores.map((c) => (
@@ -133,7 +141,7 @@ export function AuditTrailPanel({ scoreId, criteria }: AuditTrailPanelProps) {
                         </table>
                       </div>
                       <div>
-                        <p className="font-semibold mb-1">New</p>
+                        <p className="font-semibold mb-1">{t('auditNewHeader')}</p>
                         <table>
                           <tbody>
                             {entry.newCriteriaScores.map((c) => (

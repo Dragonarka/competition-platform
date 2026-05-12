@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useFormatter, useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -12,21 +13,23 @@ interface ScoreOverrideManagerProps {
   competitionId: string;
 }
 
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-}
-
 export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProps) {
+  const t = useTranslations('ScoreOverride');
+  const format = useFormatter();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const selectedScoreId = searchParams.get('score');
 
   const [editingScoreId, setEditingScoreId] = useState<string | null>(null);
+
+  function formatDate(iso: string): string {
+    try {
+      return format.dateTime(new Date(iso), { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return iso;
+    }
+  }
 
   const { data: scoreList = [], isLoading } = trpc.tournament.listScoresForOverride.useQuery({
     competitionId,
@@ -58,22 +61,21 @@ export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProp
   return (
     <Tabs key={selectedScoreId ?? 'none'} defaultValue={selectedScoreId ? 'audit' : 'active'}>
       <TabsList>
-        <TabsTrigger value="active">Active Scores</TabsTrigger>
-        <TabsTrigger value="audit">Audit Trail</TabsTrigger>
+        <TabsTrigger value="active">{t('tabActiveScores')}</TabsTrigger>
+        <TabsTrigger value="audit">{t('tabAuditTrail')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="active">
         {competition?.status !== 'active' && (
           <p className="text-sm text-amber-600 dark:text-amber-400 mb-4">
-            Score overrides are only allowed while the competition is active. Current status:{' '}
-            <strong>{competition?.status ?? 'unknown'}</strong>
+            {t('notActiveWarning')} <strong>{competition?.status ?? '—'}</strong>
           </p>
         )}
 
-        {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
+        {isLoading && <p className="text-sm text-muted-foreground">{t('loadingScores')}</p>}
 
         {!isLoading && scoreList.length === 0 && (
-          <p className="text-sm text-muted-foreground">No scores submitted yet.</p>
+          <p className="text-sm text-muted-foreground">{t('noScoresSubmitted')}</p>
         )}
 
         {scoreList.length > 0 && (
@@ -81,14 +83,22 @@ export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProp
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground">Judge</th>
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground">Competitor</th>
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground text-right">
-                    Total
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                    {t('columnJudge')}
                   </th>
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground">Submitted</th>
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground">Status</th>
-                  <th className="py-2 font-semibold text-muted-foreground">Actions</th>
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                    {t('columnCompetitor')}
+                  </th>
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground text-right">
+                    {t('columnTotal')}
+                  </th>
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                    {t('columnSubmitted')}
+                  </th>
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                    {t('columnStatus')}
+                  </th>
+                  <th className="py-2 font-semibold text-muted-foreground">{t('columnActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -111,7 +121,7 @@ export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProp
                             <div className="font-medium">{s.judgeLabel}</div>
                             {s.groupIndex !== null && (
                               <div className="text-xs text-muted-foreground">
-                                Group {s.groupIndex + 1}
+                                {t('judgeGroupTag', { n: s.groupIndex + 1 })}
                               </div>
                             )}
                           </td>
@@ -128,10 +138,12 @@ export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProp
                           <td className="py-3 pr-3 text-xs">
                             {s.hasOverrides ? (
                               <span className="text-amber-700 dark:text-amber-400">
-                                ⚠ Overridden
+                                {t('statusOverridden')}
                               </span>
                             ) : (
-                              <span className="text-green-700 dark:text-green-400">✓ Original</span>
+                              <span className="text-green-700 dark:text-green-400">
+                                {t('statusOriginal')}
+                              </span>
                             )}
                           </td>
                           <td className="py-3 flex flex-wrap gap-2">
@@ -141,7 +153,7 @@ export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProp
                               onClick={() => setEditingScoreId(s.scoreId)}
                               disabled={competition?.status !== 'active'}
                             >
-                              Override
+                              {t('overrideCta')}
                             </Button>
                             {s.hasOverrides && (
                               <Button
@@ -149,7 +161,7 @@ export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProp
                                 variant="ghost"
                                 onClick={() => viewHistory(s.scoreId)}
                               >
-                                View history
+                                {t('viewHistory')}
                               </Button>
                             )}
                           </td>
@@ -180,9 +192,7 @@ export function ScoreOverrideManager({ competitionId }: ScoreOverrideManagerProp
         {selectedScoreId ? (
           <AuditTrailPanel scoreId={selectedScoreId} criteria={criteria} />
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Click &quot;View history&quot; on a score row to see its audit trail.
-          </p>
+          <p className="text-sm text-muted-foreground">{t('auditEmptyPrompt')}</p>
         )}
       </TabsContent>
     </Tabs>

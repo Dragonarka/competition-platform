@@ -1,25 +1,32 @@
 'use client';
 
 import { useState } from 'react';
+import { useFormatter, useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { usePublicSocket } from '@/hooks/use-public-socket';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface CypherResultsPanelProps {
   competitionId: string;
 }
 
-function formatLockedAt(iso: string | null | undefined): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-}
-
 export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
+  const t = useTranslations('CypherResults');
+  const tErr = useTranslations();
+  const tCommon = useTranslations('Common');
+  const format = useFormatter();
+
+  function formatLockedAt(iso: string | null | undefined): string {
+    if (!iso) return '';
+    try {
+      return format.dateTime(new Date(iso), { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return iso ?? '';
+    }
+  }
+
   const utils = trpc.useUtils();
   const { data: competition, isLoading: competitionLoading } =
     trpc.tournament.getCompetition.useQuery({ competitionId });
@@ -39,11 +46,12 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
       void utils.tournament.getCompetition.invalidate({ competitionId });
       void utils.tournament.getStandings.invalidate({ competitionId });
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
-  // Socket: react to phase.transitioned broadcast (e.g. another organizer's
-  // confirm or a battle phase trigger). Refresh competition + standings.
   usePublicSocket({
     competitionId,
     onPhaseTransitioned: () => {
@@ -53,12 +61,9 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
   });
 
   if (competitionLoading) {
-    return <p className="text-muted-foreground text-sm">Loading competition status...</p>;
+    return <p className="text-muted-foreground text-sm">{t('loadingCompetition')}</p>;
   }
   if (!competition) return null;
-
-  // Only render in the active scoring phase. Other statuses are owned by
-  // sibling panels (StartCypherPhasePanel renders for 'draft', etc.).
   if (competition.status !== 'active') return null;
 
   const advancementThreshold = competition.advancementThreshold ?? 0;
@@ -67,34 +72,34 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
     advancementThreshold > 0 ? Math.min(advancementThreshold, totalParticipants) : 0;
   const isLocked = competition.cypherCompletedAt != null;
 
-  // Detect uneven judge coverage: if any competitor has fewer judge scores than
-  // the maximum across all competitors, some expected scores are still pending.
   const maxJudgeCount = standings.length > 0 ? Math.max(...standings.map((s) => s.judgeCount)) : 0;
   const pendingCount = standings.filter((s) => s.judgeCount < maxJudgeCount).length;
   const hasPendingWarning = !isLocked && pendingCount > 0;
 
   const headerLabel =
     advancementThreshold > 0 && totalParticipants > advancementThreshold
-      ? `Top ${advancementThreshold} of ${totalParticipants} advance`
+      ? t('topNAdvance', { threshold: advancementThreshold, total: totalParticipants })
       : totalParticipants > 0
-        ? `All ${totalParticipants} advance`
-        : `No scores submitted yet`;
+        ? t('allAdvance', { total: totalParticipants })
+        : t('noneSubmitted');
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Cypher Results &amp; Advancement</CardTitle>
+        <CardTitle className="text-base">{t('cardTitle')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {standingsLoading && <p className="text-sm text-muted-foreground">Loading standings...</p>}
+        {standingsLoading && (
+          <p className="text-sm text-muted-foreground">{t('loadingStandings')}</p>
+        )}
 
         <p className="text-sm text-muted-foreground">{headerLabel}</p>
 
         {hasPendingWarning && (
           <p className="text-xs text-amber-600 dark:text-amber-400">
-            Note: {pendingCount} competitor{pendingCount === 1 ? '' : 's'}{' '}
-            {pendingCount === 1 ? 'has' : 'have'} fewer judge scores than others. You can confirm
-            anyway.
+            {pendingCount === 1
+              ? t('pendingScoresOne')
+              : t('pendingScoresMany', { count: pendingCount })}
           </p>
         )}
 
@@ -103,13 +108,19 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground w-10">#</th>
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground">Name</th>
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground">ID</th>
-                  <th className="py-2 pr-3 font-semibold text-muted-foreground text-right">
-                    Score
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground w-10">
+                    {t('rankHeader')}
                   </th>
-                  <th className="py-2 font-semibold text-muted-foreground text-right">Judges</th>
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                    {t('nameHeader')}
+                  </th>
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground">{t('idHeader')}</th>
+                  <th className="py-2 pr-3 font-semibold text-muted-foreground text-right">
+                    {t('scoreHeader')}
+                  </th>
+                  <th className="py-2 font-semibold text-muted-foreground text-right">
+                    {t('judgesHeader')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -127,7 +138,7 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
                         {entry.competitorName}
                         {advances && (
                           <span className="ml-2 text-xs font-medium text-green-700 dark:text-green-400">
-                            Advances ✓
+                            {t('advancesIndicator')}
                           </span>
                         )}
                       </td>
@@ -147,13 +158,15 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
         {isLocked ? (
           <div className="border border-green-500 bg-green-50 dark:bg-green-950/20 rounded p-3 space-y-1">
             <p className="text-sm font-medium text-green-700 dark:text-green-400">
-              ✓ Advancement locked at {formatLockedAt(competition.cypherCompletedAt)}.
+              {t('lockedNotice', { time: formatLockedAt(competition.cypherCompletedAt) })}
             </p>
             <p className="text-xs text-muted-foreground">
-              {advancedCount} competitor{advancedCount === 1 ? '' : 's'} advance to Battles.
+              {advancedCount === 1
+                ? t('advancesCountOne')
+                : t('advancesCountMany', { count: advancedCount })}
             </p>
             <Button disabled className="mt-2 w-full sm:w-auto">
-              ✓ Advancement Confirmed
+              {t('confirmedCta')}
             </Button>
           </div>
         ) : !isConfirming ? (
@@ -171,20 +184,20 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
               disabled={advancementThreshold <= 0}
               className="w-full sm:w-auto"
             >
-              Confirm Advancement
+              {t('confirmAdvanceCta')}
             </Button>
             {advancementThreshold <= 0 && (
-              <p className="text-xs text-destructive">
-                Advancement threshold has not been configured for this competition.
-              </p>
+              <p className="text-xs text-destructive">{t('thresholdMissing')}</p>
             )}
           </div>
         ) : (
           <div className="border border-destructive rounded p-3 space-y-2">
             <p className="text-sm font-medium">
-              Lock the top {advancedCount} competitor{advancedCount === 1 ? '' : 's'} for Battles?
+              {advancedCount === 1
+                ? t('lockPromptOne')
+                : t('lockPromptMany', { count: advancedCount })}
             </p>
-            <p className="text-xs text-muted-foreground">This cannot be undone via this UI.</p>
+            <p className="text-xs text-muted-foreground">{t('irreversibleHint')}</p>
             {error && (
               <p className="text-sm text-destructive rounded bg-destructive/10 px-3 py-2">
                 {error}
@@ -196,7 +209,7 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
                 onClick={() => completeMutation.mutate({ competitionId })}
                 disabled={completeMutation.isPending}
               >
-                {completeMutation.isPending ? 'Confirming...' : 'Yes, confirm advancement'}
+                {completeMutation.isPending ? t('confirmingProgress') : t('yesConfirm')}
               </Button>
               <Button
                 variant="ghost"
@@ -206,7 +219,7 @@ export function CypherResultsPanel({ competitionId }: CypherResultsPanelProps) {
                 }}
                 disabled={completeMutation.isPending}
               >
-                Cancel
+                {tCommon('cancel')}
               </Button>
             </div>
           </div>

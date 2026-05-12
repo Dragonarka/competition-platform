@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface AssignmentResult {
   groupCount: number;
@@ -12,6 +14,8 @@ interface AssignmentResult {
 }
 
 export function StartCypherPhasePanel({ competitionId }: { competitionId: string }) {
+  const t = useTranslations('StartCypher');
+  const tErr = useTranslations();
   const { data: competition, isLoading } = trpc.tournament.getCompetition.useQuery({
     competitionId,
   });
@@ -25,28 +29,30 @@ export function StartCypherPhasePanel({ competitionId }: { competitionId: string
       setError(null);
       utils.tournament.getCompetition.invalidate({ competitionId });
     },
-    onError: (err) => setError(err.message),
+    onError: (err) => {
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
+    },
   });
 
-  if (isLoading)
-    return <p className="text-muted-foreground text-sm">Loading competition status...</p>;
+  if (isLoading) return <p className="text-muted-foreground text-sm">{t('loadingStatus')}</p>;
   if (!competition) return null;
 
   if (competition.status === 'active') {
     return (
       <Card className="border-green-500">
         <CardHeader>
-          <CardTitle className="text-base text-green-600">Cypher Phase Active</CardTitle>
+          <CardTitle className="text-base text-green-600">{t('activeTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            The Cypher phase has started. Judges can now access their assigned participants via
-            their invite links.
-          </p>
+          <p className="text-sm text-muted-foreground">{t('activeBody')}</p>
           {result && (
             <p className="text-sm mt-2">
-              {result.competitorCount} participants assigned across {result.groupCount} groups (
-              {result.judgeCount} judges).
+              {t('assignmentResult', {
+                competitors: result.competitorCount,
+                groups: result.groupCount,
+                judges: result.judgeCount,
+              })}
             </p>
           )}
         </CardContent>
@@ -57,14 +63,10 @@ export function StartCypherPhasePanel({ competitionId }: { competitionId: string
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Start Cypher Phase</CardTitle>
+        <CardTitle className="text-base">{t('title')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Starting the Cypher phase will automatically assign all registered participants to judge
-          groups using round-robin distribution. Make sure all criteria, participants, and judge
-          links are configured before starting.
-        </p>
+        <p className="text-sm text-muted-foreground">{t('hint')}</p>
         {error && (
           <p className="text-sm text-destructive rounded bg-destructive/10 px-3 py-2">{error}</p>
         )}
@@ -73,7 +75,7 @@ export function StartCypherPhasePanel({ competitionId }: { competitionId: string
           disabled={startMutation.isPending}
           className="w-full sm:w-auto"
         >
-          {startMutation.isPending ? 'Starting...' : 'Start Cypher Phase'}
+          {startMutation.isPending ? t('starting') : t('startCta')}
         </Button>
       </CardContent>
     </Card>

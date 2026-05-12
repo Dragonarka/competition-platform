@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface CompetitorManagementPanelProps {
   competitionId: string;
@@ -16,6 +18,8 @@ interface ActionFormState {
 }
 
 export function CompetitorManagementPanel({ competitionId }: CompetitorManagementPanelProps) {
+  const t = useTranslations('Competitors');
+  const tErr = useTranslations();
   const utils = trpc.useUtils();
   const [form, setForm] = useState<ActionFormState | null>(null);
 
@@ -31,7 +35,9 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
       void utils.tournament.getStandings.invalidate({ competitionId });
     },
     onError: (err) => {
-      setForm((prev) => (prev ? { ...prev, error: err.message } : prev));
+      const key = getTrpcErrorI18nKey(err);
+      const msg = key ? tErr(key) : err.message;
+      setForm((prev) => (prev ? { ...prev, error: msg } : prev));
     },
   });
 
@@ -42,7 +48,9 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
       void utils.tournament.getStandings.invalidate({ competitionId });
     },
     onError: (err) => {
-      setForm((prev) => (prev ? { ...prev, error: err.message } : prev));
+      const key = getTrpcErrorI18nKey(err);
+      const msg = key ? tErr(key) : err.message;
+      setForm((prev) => (prev ? { ...prev, error: msg } : prev));
     },
   });
 
@@ -77,15 +85,14 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
     <div className="space-y-4">
       {!isCompetitionActive && (
         <p className="text-sm text-amber-600 dark:text-amber-400">
-          Competitor management is only available while the competition is active. Current status:{' '}
-          <strong>{competition?.status ?? 'unknown'}</strong>
+          {t('notActiveWarning')} <strong>{competition?.status ?? '—'}</strong>
         </p>
       )}
 
-      {isLoading && <p className="text-sm text-muted-foreground">Loading...</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">{t('loading')}</p>}
 
       {!isLoading && competitors.length === 0 && (
-        <p className="text-sm text-muted-foreground">No competitors registered yet.</p>
+        <p className="text-sm text-muted-foreground">{t('empty')}</p>
       )}
 
       {competitors.length > 0 && (
@@ -93,10 +100,14 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="py-2 pr-3 font-semibold text-muted-foreground">Name</th>
-                <th className="py-2 pr-3 font-semibold text-muted-foreground">Participant ID</th>
-                <th className="py-2 pr-3 font-semibold text-muted-foreground">Status</th>
-                <th className="py-2 font-semibold text-muted-foreground">Actions</th>
+                <th className="py-2 pr-3 font-semibold text-muted-foreground">{t('columnName')}</th>
+                <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                  {t('columnParticipantId')}
+                </th>
+                <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                  {t('columnStatus')}
+                </th>
+                <th className="py-2 font-semibold text-muted-foreground">{t('columnActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -118,11 +129,11 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
                         <td className="py-3 pr-3">
                           {isWithdrawn ? (
                             <span className="text-amber-700 dark:text-amber-400 text-xs font-medium">
-                              ⚠ Withdrawn
+                              {t('withdrawnBadge')}
                             </span>
                           ) : (
                             <span className="text-green-700 dark:text-green-400 text-xs font-medium">
-                              ✓ Active
+                              {t('activeBadge')}
                             </span>
                           )}
                         </td>
@@ -133,7 +144,7 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
                               variant="outline"
                               onClick={() => openForm(c.id, 'withdraw')}
                             >
-                              Withdraw
+                              {t('withdrawCta')}
                             </Button>
                           )}
                           {isWithdrawn && isCompetitionActive && hasCypherCompleted && (
@@ -142,7 +153,7 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
                               variant="outline"
                               onClick={() => openForm(c.id, 'rescue')}
                             >
-                              Rescue
+                              {t('rescueCta')}
                             </Button>
                           )}
                         </td>
@@ -152,13 +163,13 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
                         <div className="space-y-2">
                           <p className="text-sm font-medium">
                             {form.action === 'withdraw'
-                              ? `Withdraw "${c.name}"`
-                              : `Rescue "${c.name}"`}
+                              ? t('withdrawTitle', { name: c.name })
+                              : t('rescueTitle', { name: c.name })}
                           </p>
                           <input
                             type="text"
                             className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                            placeholder="Reason for this action (required)"
+                            placeholder={t('actionReasonPlaceholder')}
                             value={form.reason}
                             onChange={(e) =>
                               setForm((prev) =>
@@ -178,7 +189,7 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
                                 rescueMutation.isPending
                               }
                             >
-                              Confirm
+                              {t('confirm')}
                             </Button>
                             <Button
                               size="sm"
@@ -186,7 +197,7 @@ export function CompetitorManagementPanel({ competitionId }: CompetitorManagemen
                               onClick={() => setForm(null)}
                               disabled={withdrawMutation.isPending || rescueMutation.isPending}
                             >
-                              Cancel
+                              {t('cancel')}
                             </Button>
                           </div>
                         </div>

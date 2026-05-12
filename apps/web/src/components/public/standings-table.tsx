@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { StandingsEntry } from '@competition-platform/shared';
 import { BreakdownPanel } from './breakdown-panel';
 
@@ -19,6 +20,7 @@ interface StandingsTableProps {
 }
 
 export function StandingsTable({ standings, nextByCompetitorId }: StandingsTableProps) {
+  const t = useTranslations('PublicStandings');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (standings.length === 0) {
@@ -28,7 +30,7 @@ export function StandingsTable({ standings, nextByCompetitorId }: StandingsTable
           className="mb-3 inline-block h-2 w-2 rounded-full bg-green-500 animate-pulse"
           aria-hidden="true"
         />
-        <p>Standings will appear as judges score.</p>
+        <p>{t('emptyHint')}</p>
       </div>
     );
   }
@@ -37,14 +39,20 @@ export function StandingsTable({ standings, nextByCompetitorId }: StandingsTable
     <table className="w-full border-collapse text-sm">
       <thead>
         <tr className="border-b border-border">
-          <th className="text-left py-3 pr-4 font-semibold text-muted-foreground w-10">#</th>
-          <th className="text-left py-3 pr-4 font-semibold text-muted-foreground">Name</th>
-          <th className="text-left py-3 pr-4 font-semibold text-muted-foreground hidden sm:table-cell">
-            ID
+          <th className="text-left py-3 pr-4 font-semibold text-muted-foreground w-10">
+            {t('rankHeader')}
           </th>
-          <th className="text-right py-3 pr-4 font-semibold text-muted-foreground">Score</th>
+          <th className="text-left py-3 pr-4 font-semibold text-muted-foreground">
+            {t('columnName')}
+          </th>
+          <th className="text-left py-3 pr-4 font-semibold text-muted-foreground hidden sm:table-cell">
+            {t('columnId')}
+          </th>
+          <th className="text-right py-3 pr-4 font-semibold text-muted-foreground">
+            {t('scoreHeader')}
+          </th>
           <th className="text-right py-3 font-semibold text-muted-foreground hidden sm:table-cell">
-            Judges
+            {t('columnJudges')}
           </th>
         </tr>
       </thead>
@@ -78,6 +86,7 @@ function Row({
   onToggle: () => void;
   nextHint: NextMatchupHint | undefined;
 }) {
+  const t = useTranslations('PublicStandings');
   return (
     <>
       <tr
@@ -95,7 +104,10 @@ function Row({
                 className="inline-flex items-center gap-1 self-start rounded bg-blue-50 px-2 py-0.5 text-xs text-blue-900 dark:bg-blue-950/40 dark:text-blue-200"
                 data-testid={`next-hint-${entry.competitorId}`}
               >
-                Next: vs. {nextHint.opponentName ?? 'TBD'} · R{nextHint.roundNumber}
+                {t('nextHint', {
+                  opponent: nextHint.opponentName ?? t('tbd'),
+                  round: nextHint.roundNumber,
+                })}
               </span>
             )}
           </div>

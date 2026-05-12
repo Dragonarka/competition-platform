@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { roundLabel } from '@/lib/bracket-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,10 +39,11 @@ function MatchupSlot({
   isWinner: boolean;
   isBye: boolean;
 }) {
+  const t = useTranslations('Bracket');
   if (!competitor) {
     return (
       <div className="flex items-center justify-between rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-        <span>BYE</span>
+        <span>{t('byeLabel')}</span>
       </div>
     );
   }
@@ -62,14 +64,17 @@ function MatchupSlot({
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span>{competitor.participantId}</span>
-        {isWinner && <span className="text-green-700 dark:text-green-400">✓ Winner</span>}
-        {isBye && !isWinner && <span className="text-blue-700 dark:text-blue-400">✓ Bye</span>}
+        {isWinner && <span className="text-green-700 dark:text-green-400">{t('winnerCheck')}</span>}
+        {isBye && !isWinner && (
+          <span className="text-blue-700 dark:text-blue-400">{t('byeCheck')}</span>
+        )}
       </div>
     </div>
   );
 }
 
 export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
+  const t = useTranslations('Bracket');
   const { data: competition } = trpc.tournament.getCompetition.useQuery({
     competitionId,
   });
@@ -84,10 +89,10 @@ export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Battles Bracket</CardTitle>
+          <CardTitle className="text-base">{t('cardTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Loading bracket...</p>
+          <p className="text-sm text-muted-foreground">{t('loadingBracket')}</p>
         </CardContent>
       </Card>
     );
@@ -101,12 +106,10 @@ export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Battles Bracket</CardTitle>
+          <CardTitle className="text-base">{t('cardTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No bracket has been generated. This is expected when fewer than 2 competitors qualify.
-          </p>
+          <p className="text-sm text-muted-foreground">{t('emptyBracket')}</p>
         </CardContent>
       </Card>
     );
@@ -119,10 +122,6 @@ export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
     rounds.set(m.roundNumber, list);
   }
   const orderedRounds = [...rounds.entries()].sort((a, b) => a[0] - b[0]);
-  // Derive total rounds from the round-1 matchup count: at generation time only
-  // round 1 exists (round 1 has bracketSize/2 matchups), so total rounds equals
-  // log2(round1Count) + 1. Falls back to the rendered round count once Story 5.3
-  // populates later rounds and the round-1 count is no longer authoritative.
   const round1Count = rounds.get(1)?.length ?? 0;
   const totalRounds = round1Count > 0 ? Math.log2(round1Count) + 1 : orderedRounds.length;
 
@@ -143,17 +142,17 @@ export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Battles Bracket</CardTitle>
+        <CardTitle className="text-base">{t('cardTitle')}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {championCompetitorId && (
           <div className="rounded-md border border-yellow-500/40 bg-yellow-50 px-4 py-3 text-sm font-semibold text-yellow-900 dark:bg-yellow-950/20 dark:text-yellow-200">
-            🏆 Champion: {championName ?? championCompetitorId}
+            {t('championBanner', { name: championName ?? championCompetitorId })}
           </div>
         )}
         {currentRoundNumber !== null && (
           <p className="text-xs text-muted-foreground">
-            Current round: {roundLabel(currentRoundNumber, totalRounds)}
+            {t('currentRound', { round: roundLabel(currentRoundNumber, totalRounds) })}
           </p>
         )}
         {orderedRounds.map(([roundNumber, roundMatchups]) => (
@@ -169,7 +168,9 @@ export function BracketViewPanel({ competitionId }: BracketViewPanelProps) {
                   m.winnerCompetitorId !== null && m.winnerCompetitorId === m.competitorBId;
                 return (
                   <div key={m.id} className="rounded-md border border-border bg-card p-3 space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">Match {idx + 1}</p>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {t('matchLabel', { n: idx + 1 })}
+                    </p>
                     <MatchupSlot
                       competitor={m.competitorA}
                       seed={m.seedA}

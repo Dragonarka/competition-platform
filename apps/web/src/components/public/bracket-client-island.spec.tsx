@@ -193,7 +193,7 @@ describe('BracketClientIsland', () => {
     expect(wrapper?.getAttribute('data-stale')).toBe('true');
     expect(wrapper?.className).toContain('opacity-60');
     const label = container.querySelector('[data-testid="connection-status-label"]');
-    expect(label?.textContent).toBe('Reconnecting...');
+    expect(label?.textContent).toBe('Reconnecting…');
     unmount();
   });
 });

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { StandingsEntry } from '@competition-platform/shared';
 
 type CurrentPhase = 'configuration' | 'cypher' | 'cypher-review' | 'battles' | 'completed';
@@ -21,15 +22,15 @@ export interface PresenterViewProps {
   champion: { name: string; seed: number } | null;
 }
 
-const PHASE_BADGES: Record<string, { label: string; className: string }> = {
-  configuration: { label: 'SETUP', className: 'bg-zinc-700 text-zinc-200' },
-  cypher: { label: 'CYPHER SCORING', className: 'bg-blue-600 text-blue-50' },
-  'cypher-review': { label: 'REVIEW IN PROGRESS', className: 'bg-yellow-600 text-yellow-50' },
-  battles: { label: 'BATTLES', className: 'bg-green-600 text-green-50' },
-  completed: { label: 'COMPLETED', className: 'bg-amber-500 text-amber-950' },
+const PHASE_BADGE_KEYS: Record<string, { key: string; className: string }> = {
+  configuration: { key: 'badgeSetup', className: 'bg-zinc-700 text-zinc-200' },
+  cypher: { key: 'badgeCypher', className: 'bg-blue-600 text-blue-50' },
+  'cypher-review': { key: 'badgeReview', className: 'bg-yellow-600 text-yellow-50' },
+  battles: { key: 'badgeBattles', className: 'bg-green-600 text-green-50' },
+  completed: { key: 'badgeCompleted', className: 'bg-amber-500 text-amber-950' },
 };
 
-const DEFAULT_BADGE = { label: 'UNKNOWN', className: 'bg-zinc-700 text-zinc-200' };
+const DEFAULT_BADGE = { key: 'badgeUnknown', className: 'bg-zinc-700 text-zinc-200' };
 
 export function PresenterView({
   competitionName,
@@ -41,7 +42,8 @@ export function PresenterView({
   nextMatchup,
   champion,
 }: PresenterViewProps) {
-  const badge = PHASE_BADGES[currentPhase] ?? DEFAULT_BADGE;
+  const t = useTranslations('Presenter');
+  const badge = PHASE_BADGE_KEYS[currentPhase] ?? DEFAULT_BADGE;
 
   return (
     <div data-testid="presenter-view" className="flex flex-col items-center px-8 py-8 min-h-screen">
@@ -50,12 +52,12 @@ export function PresenterView({
       <span
         className={`inline-block rounded-full px-4 py-1 text-sm font-bold uppercase tracking-wider mb-8 ${badge.className}`}
       >
-        {badge.label}
+        {t(badge.key)}
       </span>
 
       {currentPhase === 'configuration' && (
         <p className="text-lg text-zinc-400 text-center" data-testid="presenter-setup">
-          Competition is being set up. Scoring has not started yet.
+          {t('setupHint')}
         </p>
       )}
 
@@ -70,7 +72,7 @@ export function PresenterView({
       {currentPhase === 'cypher-review' && (
         <div className="w-full max-w-lg text-center" data-testid="presenter-review">
           <StandingsList standings={topStandings} />
-          <p className="text-lg text-yellow-400 mt-6">Awaiting advancement confirmation.</p>
+          <p className="text-lg text-yellow-400 mt-6">{t('awaitingAdvancement')}</p>
         </div>
       )}
 
@@ -83,7 +85,7 @@ export function PresenterView({
           <ChampionDisplay name={champion.name} seed={champion.seed} />
         ) : (
           <p className="text-lg text-zinc-400" data-testid="presenter-champion-loading">
-            Loading champion results...
+            {t('championLoading')}
           </p>
         ))}
     </div>
@@ -99,6 +101,7 @@ function CypherDisplay({
   totalScoresExpected: number;
   topStandings: StandingsEntry[];
 }) {
+  const t = useTranslations('Presenter');
   const progress =
     totalScoresExpected > 0 ? Math.round((totalScoresSubmitted / totalScoresExpected) * 100) : 0;
 
@@ -106,7 +109,10 @@ function CypherDisplay({
     <div className="w-full max-w-lg text-center" data-testid="presenter-cypher">
       <div className="mb-6">
         <p className="text-lg text-zinc-300 mb-2">
-          {totalScoresSubmitted} / {totalScoresExpected} scores submitted
+          {t('scoresProgress', {
+            submitted: totalScoresSubmitted,
+            expected: totalScoresExpected,
+          })}
         </p>
         <div className="w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
           <div
@@ -122,10 +128,11 @@ function CypherDisplay({
 }
 
 function StandingsList({ standings }: { standings: StandingsEntry[] }) {
+  const t = useTranslations('Presenter');
   if (standings.length === 0) {
     return (
       <p className="text-lg text-zinc-500" data-testid="presenter-no-scores">
-        Waiting for scores...
+        {t('noScoresYet')}
       </p>
     );
   }
@@ -154,17 +161,18 @@ function BattlesDisplay({
   currentMatchup: MatchupInfo | null;
   nextMatchup: MatchupInfo | null;
 }) {
+  const t = useTranslations('Presenter');
   return (
     <div className="w-full max-w-lg text-center" data-testid="presenter-battles">
       {currentMatchup ? (
         <div className="mb-12">
           <p className="text-xl font-bold text-green-400 uppercase tracking-wider mb-6">
-            Now Battling
+            {t('nowBattling')}
           </p>
           <p className="text-5xl lg:text-[64px] font-bold leading-tight mb-2">
             {currentMatchup.competitorA}
           </p>
-          <p className="text-2xl text-zinc-500 font-bold my-2">vs</p>
+          <p className="text-2xl text-zinc-500 font-bold my-2">{t('vs')}</p>
           <p className="text-5xl lg:text-[64px] font-bold leading-tight mb-4">
             {currentMatchup.competitorB}
           </p>
@@ -172,15 +180,17 @@ function BattlesDisplay({
         </div>
       ) : (
         <p className="text-xl text-zinc-400 mb-8" data-testid="presenter-awaiting">
-          Awaiting next round...
+          {t('awaitingNextRound')}
         </p>
       )}
 
       {nextMatchup && (
         <div data-testid="presenter-next">
-          <p className="text-lg font-bold text-zinc-500 uppercase tracking-wider mb-3">Up Next</p>
+          <p className="text-lg font-bold text-zinc-500 uppercase tracking-wider mb-3">
+            {t('upNext')}
+          </p>
           <p className="text-2xl font-semibold">
-            {nextMatchup.competitorA} <span className="text-zinc-500">vs</span>{' '}
+            {nextMatchup.competitorA} <span className="text-zinc-500">{t('vs')}</span>{' '}
             {nextMatchup.competitorB}
           </p>
           <p className="text-sm text-zinc-500 mt-1">{nextMatchup.roundLabel}</p>
@@ -191,9 +201,12 @@ function BattlesDisplay({
 }
 
 function ChampionDisplay({ name, seed }: { name: string; seed: number }) {
+  const t = useTranslations('Presenter');
   return (
     <div className="text-center" data-testid="presenter-champion">
-      <p className="text-2xl font-bold text-yellow-400 uppercase tracking-widest mb-4">Champion</p>
+      <p className="text-2xl font-bold text-yellow-400 uppercase tracking-widest mb-4">
+        {t('championLabel')}
+      </p>
       <div
         className="relative rounded-2xl border-2 border-yellow-500/40 px-8 py-6"
         style={{ animation: 'champion-glow 2s ease-in-out infinite' }}
@@ -206,7 +219,7 @@ function ChampionDisplay({ name, seed }: { name: string; seed: number }) {
         `}</style>
         <p className="text-5xl lg:text-[64px] font-bold text-yellow-300 leading-tight">{name}</p>
       </div>
-      <p className="text-xl text-zinc-400 mt-4">Seed #{seed}</p>
+      <p className="text-xl text-zinc-400 mt-4">{t('seedLabel', { seed })}</p>
     </div>
   );
 }

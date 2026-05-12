@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { useJudgeSocket } from '@/hooks/use-judge-socket';
 import { useOfflineQueue } from '@/hooks/use-offline-queue';
@@ -29,6 +30,7 @@ const DRAIN_SUCCESS_MS = 2500;
 const DRAIN_ERROR_MS = 6000;
 
 export default function JudgePage() {
+  const t = useTranslations('Judge');
   const { token } = useParams<{ token: string }>();
   const { submissionStatus, connectionStatus, setSubmissionStatus, setConnectionStatus } =
     useScoringStore();
@@ -45,7 +47,7 @@ export default function JudgePage() {
         clearTimeout(advanceTimerRef.current);
         advanceTimerRef.current = null;
       }
-      drainNoticeTimersRef.current.forEach((t) => clearTimeout(t));
+      drainNoticeTimersRef.current.forEach((tm) => clearTimeout(tm));
       drainNoticeTimersRef.current.clear();
     };
   }, []);
@@ -147,7 +149,7 @@ export default function JudgePage() {
         {
           id: s.idempotencyKey,
           variant: 'success',
-          message: s.kind === 'vote' ? 'Vote submitted ✓' : 'Score submitted ✓',
+          message: s.kind === 'vote' ? t('voteSubmittedNotice') : t('scoreSubmittedNotice'),
         },
         DRAIN_SUCCESS_MS,
       );
@@ -165,10 +167,7 @@ export default function JudgePage() {
         {
           id: s.idempotencyKey,
           variant: 'error',
-          message:
-            s.kind === 'vote'
-              ? 'Vote failed — contact organizer'
-              : 'Score failed — contact organizer',
+          message: s.kind === 'vote' ? t('voteFailedNotice') : t('scoreFailedNotice'),
         },
         DRAIN_ERROR_MS,
       );
@@ -190,15 +189,17 @@ export default function JudgePage() {
           data-testid="practice-mode-badge"
           className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-300 dark:border-amber-700"
         >
-          PRACTICE MODE
+          {t('practiceModeBadge')}
         </span>
       )}
       <div className={`w-3 h-3 rounded-full ${STATUS_COLORS[connectionStatus]}`} />
       <span className="text-xs text-muted-foreground">
-        {connectionStatus === 'connected' ? 'Online' : connectionStatus}
+        {connectionStatus === 'connected' ? t('online') : connectionStatus}
       </span>
       {offlineQueue.queueSize > 0 && (
-        <span className="text-xs text-yellow-600">{offlineQueue.queueSize} queued</span>
+        <span className="text-xs text-yellow-600">
+          {t('queuedCount', { n: offlineQueue.queueSize })}
+        </span>
       )}
     </div>
   );
@@ -225,7 +226,7 @@ export default function JudgePage() {
   if (isLoading) {
     return (
       <main className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">Validating link...</p>
+        <p className="text-muted-foreground">{t('validating')}</p>
       </main>
     );
   }
@@ -236,12 +237,10 @@ export default function JudgePage() {
       <main className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center space-y-2 max-w-sm">
           <h1 className="text-2xl font-bold">
-            {isInvalidLink ? 'Link Not Valid' : 'Something went wrong'}
+            {isInvalidLink ? t('linkNotValid') : t('somethingWrong')}
           </h1>
           <p className="text-muted-foreground">
-            {isInvalidLink
-              ? 'This judge link is invalid or has been revoked. Contact the organizer for a new link.'
-              : 'Unable to validate your link. Please try again.'}
+            {isInvalidLink ? t('linkNotValidHint') : t('somethingWrongHint')}
           </p>
         </div>
       </main>
@@ -256,20 +255,16 @@ export default function JudgePage() {
         {ConnectionDot}
         {DrainNoticesStack}
         <div className="text-center space-y-4 max-w-sm">
-          <h1 className="text-2xl font-bold">Welcome, {tokenData.label}</h1>
+          <h1 className="text-2xl font-bold">{t('welcome', { name: tokenData.label })}</h1>
           <p className="text-muted-foreground">
-            Competition: <strong>{tokenData.competitionName}</strong>
+            {t('competitionLabel')} <strong>{tokenData.competitionName}</strong>
           </p>
-          <p className="text-sm text-muted-foreground animate-pulse">
-            Waiting for competition to start...
-          </p>
+          <p className="text-sm text-muted-foreground animate-pulse">{t('waitingForStart')}</p>
         </div>
       </main>
     );
   }
 
-  // Phase router: cypherCompletedAt is the source of truth for "we're in
-  // battles" because Story 5.1 sets it atomically with bracket generation.
   if (inBattlesPhase) {
     return (
       <main className="min-h-screen flex flex-col p-4 max-w-lg mx-auto">
@@ -277,7 +272,7 @@ export default function JudgePage() {
         {DrainNoticesStack}
         <div className="mb-6 pt-8">
           <p className="text-sm text-muted-foreground">{tokenData.label}</p>
-          <p className="text-xs text-muted-foreground">Battles phase</p>
+          <p className="text-xs text-muted-foreground">{t('battlesPhase')}</p>
         </div>
         <BattlesVotingScreen
           token={token}
@@ -294,7 +289,7 @@ export default function JudgePage() {
       <main className="min-h-screen flex items-center justify-center">
         {ConnectionDot}
         {DrainNoticesStack}
-        <p className="text-muted-foreground">Loading assignments...</p>
+        <p className="text-muted-foreground">{t('loadingAssignments')}</p>
       </main>
     );
   }
@@ -308,8 +303,8 @@ export default function JudgePage() {
         {ConnectionDot}
         {DrainNoticesStack}
         <div className="text-center space-y-2">
-          <p className="text-lg font-semibold">All done!</p>
-          <p className="text-muted-foreground">Waiting for next round...</p>
+          <p className="text-lg font-semibold">{t('allDone')}</p>
+          <p className="text-muted-foreground">{t('waitingNextRound')}</p>
         </div>
       </main>
     );
@@ -324,8 +319,6 @@ export default function JudgePage() {
       : {};
 
   async function handleScoreSubmit(formattedScores: Record<string, string>) {
-    // Synchronous lock — prevents double-submit if React hasn't yet propagated
-    // the submitting state to the button's disabled prop.
     if (submitLockRef.current) return;
     submitLockRef.current = true;
     const idempotencyKey = crypto.randomUUID();
@@ -378,19 +371,20 @@ export default function JudgePage() {
       <div className="mb-6 pt-8">
         <p className="text-sm text-muted-foreground">{tokenData.label}</p>
         <p className="text-xs text-muted-foreground">
-          {unscored.length} of {assignments.assignedCompetitors.length} remaining
+          {t('remaining', {
+            remaining: unscored.length,
+            total: assignments.assignedCompetitors.length,
+          })}
         </p>
       </div>
 
       {submissionStatus === 'confirmed' ? (
         <div className="flex items-center justify-center flex-1">
-          <p className="text-lg font-semibold text-green-600">Score submitted!</p>
+          <p className="text-lg font-semibold text-green-600">{t('scoreSubmittedExclaim')}</p>
         </div>
       ) : submissionStatus === 'queued' ? (
         <div className="flex items-center justify-center flex-1">
-          <p className="text-lg font-semibold text-yellow-600">
-            Queued — will submit when connection returns
-          </p>
+          <p className="text-lg font-semibold text-yellow-600">{t('queuedNotice')}</p>
         </div>
       ) : (
         <JudgeScoreInput
@@ -413,11 +407,18 @@ export default function JudgePage() {
           }}
           onSubmit={handleScoreSubmit}
           disabled={submissionStatus === 'sending'}
+          labels={{
+            idPrefix: t('scoreIdPrefix'),
+            rangeFormat: (min, max) => t('scoreRange', { min, max }),
+            outOfRange: (criterion, min, max) => t('scoreOutOfRange', { criterion, min, max }),
+            submitting: t('voteSubmitting'),
+            submit: t('submitScore'),
+          }}
         />
       )}
 
       {submissionStatus === 'error' && (
-        <p className="mt-4 text-sm text-destructive">Submission failed. Please try again.</p>
+        <p className="mt-4 text-sm text-destructive">{t('submissionFailed')}</p>
       )}
     </main>
   );

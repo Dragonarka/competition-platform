@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { usePublicSocket } from '@/hooks/use-public-socket';
 import type { StandingsEntry } from '@competition-platform/shared';
@@ -10,12 +11,6 @@ const STATUS_COLORS: Record<string, string> = {
   connected: 'bg-green-500',
   reconnecting: 'bg-yellow-400 animate-pulse',
   disconnected: 'bg-red-500',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  connected: 'Live',
-  reconnecting: 'Reconnecting...',
-  disconnected: 'Offline',
 };
 
 interface StandingsClientIslandProps {
@@ -29,6 +24,7 @@ export function StandingsClientIsland({
   initialStandings,
   initialNext,
 }: StandingsClientIslandProps) {
+  const t = useTranslations('PublicStandings');
   const utils = trpc.useUtils();
 
   const { data: standings = initialStandings } = trpc.tournament.getStandings.useQuery(
@@ -44,7 +40,6 @@ export function StandingsClientIsland({
   const { connectionStatus } = usePublicSocket({
     competitionId,
     onStandingsUpdated: (incoming) => {
-      // Hot-path writethrough: avoid HTTP refetch on every score commit.
       utils.tournament.getStandings.setData({ competitionId }, incoming);
     },
     onPhaseTransitioned: () => {
@@ -71,6 +66,12 @@ export function StandingsClientIsland({
   }, [nextHints]);
 
   const stale = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
+  const statusLabel: string =
+    connectionStatus === 'connected'
+      ? t('statusConnected')
+      : connectionStatus === 'reconnecting'
+        ? t('statusReconnecting')
+        : t('statusDisconnected');
 
   return (
     <main className="min-h-screen bg-background p-4 max-w-3xl mx-auto">
@@ -80,11 +81,11 @@ export function StandingsClientIsland({
           className={`w-3 h-3 rounded-full ${STATUS_COLORS[connectionStatus] ?? 'bg-gray-400'}`}
         />
         <span className="text-xs text-muted-foreground" data-testid="connection-status-label">
-          {STATUS_LABELS[connectionStatus] ?? connectionStatus}
+          {statusLabel}
         </span>
       </div>
 
-      <h1 className="text-2xl font-bold mb-6">Live Standings</h1>
+      <h1 className="text-2xl font-bold mb-6">{t('liveTitle')}</h1>
 
       <div
         className={`transition-opacity ${stale ? 'opacity-60' : 'opacity-100'}`}
@@ -97,5 +98,4 @@ export function StandingsClientIsland({
   );
 }
 
-// Re-export for parent server component import convenience.
 export type { NextMatchupHint };

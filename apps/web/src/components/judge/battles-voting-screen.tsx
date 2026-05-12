@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { JudgeVoteInput } from '@competition-platform/format-cypher-battles';
 import { isNetworkError } from '@/lib/network-error';
@@ -8,10 +9,6 @@ import type { QueuedVoteSubmission } from '@/lib/offline-queue';
 
 interface BattlesVotingScreenProps {
   token: string;
-  /**
-   * Enqueue a vote for offline submission. Owned by the parent page so the
-   * single localStorage queue spans both phases.
-   */
   enqueueVote: (s: QueuedVoteSubmission) => void;
   revoteNoticeMatchupId?: string | null;
   onRevoteNoticeDismiss?: () => void;
@@ -25,6 +22,7 @@ export function BattlesVotingScreen({
   revoteNoticeMatchupId,
   onRevoteNoticeDismiss,
 }: BattlesVotingScreenProps) {
+  const t = useTranslations('Judge');
   const utils = trpc.useUtils();
   const submitVote = trpc.tournament.submitVote.useMutation();
   const [status, setStatus] = useState<Status>('idle');
@@ -43,15 +41,13 @@ export function BattlesVotingScreen({
   );
 
   if (isLoading || !data) {
-    return <p className="text-muted-foreground">Loading matchup...</p>;
+    return <p className="text-muted-foreground">{t('loadingMatchup')}</p>;
   }
 
   if (!data.battlesActive) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-lg text-muted-foreground">
-          Battles haven&apos;t started yet — waiting for the organizer.
-        </p>
+        <p className="text-lg text-muted-foreground">{t('battlesNotStarted')}</p>
       </div>
     );
   }
@@ -59,7 +55,7 @@ export function BattlesVotingScreen({
   if (data.currentMatchup === null) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-lg text-muted-foreground animate-pulse">Waiting for next matchup...</p>
+        <p className="text-lg text-muted-foreground animate-pulse">{t('waitingNextMatchup')}</p>
       </div>
     );
   }
@@ -118,16 +114,14 @@ export function BattlesVotingScreen({
   if (status === 'confirmed') {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-lg font-semibold text-green-600">Vote submitted!</p>
+        <p className="text-lg font-semibold text-green-600">{t('voteSubmittedExclaim')}</p>
       </div>
     );
   }
   if (status === 'queued') {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-lg font-semibold text-yellow-600">
-          Queued — will submit when connection returns
-        </p>
+        <p className="text-lg font-semibold text-yellow-600">{t('queuedNotice')}</p>
       </div>
     );
   }
@@ -144,11 +138,14 @@ export function BattlesVotingScreen({
           role="status"
           className="rounded border border-yellow-500/40 bg-yellow-50 px-3 py-2 text-sm text-yellow-900 dark:bg-yellow-950/20 dark:text-yellow-200"
         >
-          Tied vote — re-voting on this matchup.
+          {t('revoteNotice')}
         </p>
       )}
       <p className="text-xs text-muted-foreground uppercase tracking-wide">
-        Round {matchup.roundNumber} · Match {matchup.bracketPosition + 1}
+        {t('matchupHeader', {
+          round: matchup.roundNumber,
+          match: matchup.bracketPosition + 1,
+        })}
       </p>
       <JudgeVoteInput
         key={matchup.matchupId}
@@ -161,10 +158,15 @@ export function BattlesVotingScreen({
         player2Seed={matchup.competitorB.seed ?? null}
         onVote={handleVote}
         disabled={status === 'sending'}
+        labels={{
+          seed: (n) => t('seed', { n }),
+          submitting: t('voteSubmitting'),
+          voteForPlayer1: t('voteForA', { name: matchup.competitorA.name }),
+          voteForPlayer2: t('voteForB', { name: matchup.competitorB.name }),
+          voteTie: t('voteTie'),
+        }}
       />
-      {status === 'error' && (
-        <p className="text-sm text-destructive">Submission failed. Please try again.</p>
-      )}
+      {status === 'error' && <p className="text-sm text-destructive">{t('submissionFailed')}</p>}
     </div>
   );
 }

@@ -1,8 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
+import { getTrpcErrorI18nKey } from '@/lib/i18n/trpc-error';
 
 interface SoloScoringPanelProps {
   competitionId: string;
@@ -39,6 +41,8 @@ function CompetitorScoringRow({
   competitionId,
   alreadyScored,
 }: CompetitorScoringRowProps) {
+  const t = useTranslations('SoloScoring');
+  const tErr = useTranslations();
   const utils = trpc.useUtils();
   const [values, setValues] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +55,8 @@ function CompetitorScoringRow({
       void utils.tournament.getDashboardSnapshot.invalidate({ competitionId });
     },
     onError: (err) => {
-      setError(err.message);
+      const key = getTrpcErrorI18nKey(err);
+      setError(key ? tErr(key) : err.message);
     },
   });
 
@@ -78,7 +83,9 @@ function CompetitorScoringRow({
         <div className="font-medium">{competitorName}</div>
         <div className="text-xs text-muted-foreground">{participantId}</div>
         {alreadyScored && (
-          <div className="text-xs text-green-700 dark:text-green-400 mt-0.5">✓ Scored</div>
+          <div className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+            {t('scoredBadge')}
+          </div>
         )}
       </td>
       {criteria.map((c) => (
@@ -88,7 +95,7 @@ function CompetitorScoringRow({
             step="0.01"
             min={c.min}
             max={c.max}
-            placeholder={`${c.min}–${c.max}`}
+            placeholder={t('rangePlaceholder', { min: c.min, max: c.max })}
             className="w-24 rounded-md border border-input bg-background px-2 py-1 text-sm"
             value={values[c.id] ?? ''}
             onChange={(e) => setValues((prev) => ({ ...prev, [c.id]: e.target.value }))}
@@ -102,7 +109,7 @@ function CompetitorScoringRow({
           onClick={handleSubmit}
           disabled={!allValid || mutation.isPending || alreadyScored}
         >
-          {mutation.isPending ? 'Submitting…' : 'Submit Score'}
+          {mutation.isPending ? t('submitting') : t('submitScore')}
         </Button>
         {error && <p className="text-destructive text-xs mt-1">{error}</p>}
       </td>
@@ -111,6 +118,7 @@ function CompetitorScoringRow({
 }
 
 export function SoloScoringPanel({ competitionId }: SoloScoringPanelProps) {
+  const t = useTranslations('SoloScoring');
   const { data: competition } = trpc.tournament.getCompetition.useQuery({
     competitionId,
   });
@@ -147,31 +155,30 @@ export function SoloScoringPanel({ competitionId }: SoloScoringPanelProps) {
   return (
     <div className="border rounded-lg p-4 space-y-3">
       <div>
-        <h2 className="text-lg font-semibold">Solo Scoring</h2>
-        <p className="text-sm text-muted-foreground">
-          Score competitors directly. Each score is recorded under your organizer identity and
-          aggregated into the live standings.
-        </p>
+        <h2 className="text-lg font-semibold">{t('panelTitle')}</h2>
+        <p className="text-sm text-muted-foreground">{t('panelSubtitle')}</p>
       </div>
       {activeCompetitors.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No active competitors to score.</p>
+        <p className="text-sm text-muted-foreground">{t('noActiveCompetitors')}</p>
       ) : criteria.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Add evaluation criteria before scoring.</p>
+        <p className="text-sm text-muted-foreground">{t('needsCriteria')}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="py-2 pr-3 font-semibold text-muted-foreground">Competitor</th>
+                <th className="py-2 pr-3 font-semibold text-muted-foreground">
+                  {t('columnCompetitor')}
+                </th>
                 {criteria.map((c) => (
                   <th key={c.id} className="py-2 pr-3 font-semibold text-muted-foreground">
                     {c.name}
                     <div className="text-xs font-normal text-muted-foreground">
-                      ({c.min}–{c.max})
+                      {t('criterionRangeHint', { min: c.min, max: c.max })}
                     </div>
                   </th>
                 ))}
-                <th className="py-2 font-semibold text-muted-foreground">Action</th>
+                <th className="py-2 font-semibold text-muted-foreground">{t('columnAction')}</th>
               </tr>
             </thead>
             <tbody>
