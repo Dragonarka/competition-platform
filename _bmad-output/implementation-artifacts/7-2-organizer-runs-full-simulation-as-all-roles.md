@@ -555,7 +555,25 @@ None — clean implementation. One web test required `nativeInputValueSetter` to
 
 **Final CI:** API 335/335 ✓, API typecheck ✓, Web 181/181 ✓
 
+### Adversarial Code Review (AI)
+
+**Reviewer:** Claude Sonnet 4.6 on 2026-05-12
+**Outcome:** Changes Requested → Fixed inline
+
+**Findings resolved:**
+
+- **M1 (fixed):** `SimMatchupCard.handleVote` was `async` and called `mutation.mutateAsync(...)`. The `JudgeVoteInput.onVote` prop is typed `void`-returning, so the consumer never awaits the returned Promise. On mutation failure, the rejection was unhandled (browser console noise; risk of React error boundary trigger) even though `onError` correctly updated UI state. Fixed by making `handleVote` synchronous and calling `mutation.mutate(...)` — errors are already routed via `onError`. Mock in spec updated from `mutateAsync` → `mutate`.
+
+- **M2 (fixed):** `SimCompetitorRow.handleSubmit` called `crypto.randomUUID()` without a guard, while the adjacent `SimMatchupCard.handleVote` already had the `typeof crypto !== 'undefined' && 'randomUUID' in crypto` defensive check. In non-secure HTTP contexts `crypto.randomUUID` is undefined → `TypeError` on every cypher score submission. Fixed by applying the same guard to `simulation-cypher-panel.tsx`.
+
+- **M3 (fixed):** After successfully voting as Judge N, switching to another judge and back caused React to remount `SimMatchupCard` (key includes judge index), discarding the local `success` state. The organizer would see the vote form again for an already-voted matchup; submitting would yield a confusing CONFLICT error. Fixed by lifting voted-matchup tracking to `SimulationBattlesPanel` as a `Set<string>` state (keyed `${matchupId}-J${judgeIndex}`), passing `alreadyVoted` and `onVoteSuccess` props down. The success indicator now persists across judge switches without requiring a new backend query.
+
+- **L1 (fixed):** Added two new spec tests to `simulation-battles-panel.spec.tsx`: (a) error display — triggers `onError` callback and asserts the message renders; (b) M3 persistence — fires `onSuccess`, switches judges twice, asserts "Vote recorded as Judge 1" still visible.
+
+**Final CI:** Web 202/202 ✓
+
 ### Change Log
 
 - 2026-05-09: Story 7.2 implemented — multi-judge organizer scoring/voting for simulations. Backend reuses `submitOrganizerScore`/`submitOrganizerVote` with a new `resolveOrganizerJudgeSession` helper that creates per-(group, judge) and per-judge sim sessions on demand. `startCypherPhase` pre-creates `cypherGroupCount × cypherJudgeCount` sim sessions so the live aggregation pipeline sees identical state shape (AC #5 satisfied). New `(admin)/[id]/simulation/` route with phase-aware client. 33 new tests (20 backend + 13 frontend).
 - 2026-05-09: Code review fixes — H1 loop order bug in sim session pre-creation, M1 wrong error code in setSoloMode guard, M2 missing distinct-(G,J)-sessions test, M3 missing battles happy-path test. API tests now 335/335.
+- 2026-05-12: Adversarial code review fixes — M1 floating promise (mutateAsync→mutate), M2 crypto.randomUUID guard missing in cypher panel, M3 voted-state lost on judge switch (lifted to parent Set), L1 error + persistence tests added. Web tests now 202/202.

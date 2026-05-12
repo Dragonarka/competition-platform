@@ -77,7 +77,10 @@ function SimCompetitorRow({
       competitionId,
       competitorId,
       scores,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey:
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       simulatedGroupIndex,
       simulatedJudgeIndex,
     });

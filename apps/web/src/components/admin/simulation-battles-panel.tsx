@@ -23,6 +23,8 @@ interface MatchupCardProps {
   competitorBName: string;
   competitorBSeed: number | null;
   simulatedJudgeIndex: number;
+  alreadyVoted: boolean;
+  onVoteSuccess: (matchupId: string, judgeIndex: number) => void;
 }
 
 function SimMatchupCard({
@@ -37,18 +39,19 @@ function SimMatchupCard({
   competitorBName,
   competitorBSeed,
   simulatedJudgeIndex,
+  alreadyVoted,
+  onVoteSuccess,
 }: MatchupCardProps) {
   const t = useTranslations('Simulation.panels.battles');
   const tJudge = useTranslations('Judge');
   const tErr = useTranslations();
   const utils = trpc.useUtils();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   const mutation = trpc.tournament.submitOrganizerVote.useMutation({
     onSuccess: () => {
       setError(null);
-      setSuccess(true);
+      onVoteSuccess(matchupId, simulatedJudgeIndex);
       void utils.tournament.getBracket.invalidate({ competitionId });
     },
     onError: (err) => {
@@ -57,12 +60,12 @@ function SimMatchupCard({
     },
   });
 
-  async function handleVote(choice: 'player1' | 'player2' | 'tie') {
+  function handleVote(choice: 'player1' | 'player2' | 'tie') {
     const idempotencyKey =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    await mutation.mutateAsync({
+    mutation.mutate({
       competitionId,
       matchupId,
       vote: choice,
@@ -76,7 +79,7 @@ function SimMatchupCard({
       <p className="text-xs font-medium text-muted-foreground">
         {t('matchupHeaderFmt', { round: roundNumber, match: bracketPosition + 1 })}
       </p>
-      {success ? (
+      {alreadyVoted ? (
         <p className="text-sm font-semibold text-green-600">
           {t('voteRecordedAsJudge', { n: simulatedJudgeIndex + 1 })}
         </p>
@@ -113,6 +116,11 @@ export function SimulationBattlesPanel({ competitionId }: SimulationBattlesPanel
     { enabled: !!competition?.isSimulation && !!competition?.cypherCompletedAt },
   );
   const [selectedJudge, setSelectedJudge] = useState(0);
+  const [votedMatchups, setVotedMatchups] = useState<Set<string>>(new Set());
+
+  function handleVoteSuccess(matchupId: string, judgeIndex: number) {
+    setVotedMatchups((prev) => new Set([...prev, `${matchupId}-J${judgeIndex}`]));
+  }
 
   if (!competition || !competition.isSimulation || !competition.cypherCompletedAt) return null;
 
@@ -166,6 +174,8 @@ export function SimulationBattlesPanel({ competitionId }: SimulationBattlesPanel
               competitorBName={m.competitorB!.name}
               competitorBSeed={m.seedB}
               simulatedJudgeIndex={selectedJudge}
+              alreadyVoted={votedMatchups.has(`${m.id}-J${selectedJudge}`)}
+              onVoteSuccess={handleVoteSuccess}
             />
           ))
         )}

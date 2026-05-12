@@ -63,7 +63,7 @@ describe('SimulationBattlesPanel', () => {
       tournament: { getBracket: { invalidate: vi.fn() } },
     });
     submitOrganizerVoteUseMutationMock.mockReturnValue({
-      mutateAsync: vi.fn().mockResolvedValue({ success: true, idempotent: false }),
+      mutate: vi.fn(),
       isPending: false,
     });
   });
@@ -117,8 +117,8 @@ describe('SimulationBattlesPanel', () => {
   });
 
   it('passes simulatedJudgeIndex from selected dropdown when voting', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({ success: true, idempotent: false });
-    submitOrganizerVoteUseMutationMock.mockReturnValue({ mutateAsync, isPending: false });
+    const mutate = vi.fn();
+    submitOrganizerVoteUseMutationMock.mockReturnValue({ mutate, isPending: false });
     getCompetitionMock.mockReturnValue({ data: COMP_BATTLES_READY });
     getBracketMock.mockReturnValue({
       data: {
@@ -152,7 +152,7 @@ describe('SimulationBattlesPanel', () => {
     await act(async () => {
       button!.click();
     });
-    expect(mutateAsync).toHaveBeenCalledWith(
+    expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({
         competitionId: 'comp_sim',
         matchupId: 'm-1',
@@ -160,6 +160,89 @@ describe('SimulationBattlesPanel', () => {
         simulatedJudgeIndex: 2,
       }),
     );
+    unmount();
+  });
+
+  it('shows error message when vote mutation fails', async () => {
+    let onErrorCb: ((err: { message: string }) => void) | undefined;
+    const mutate = vi.fn();
+    submitOrganizerVoteUseMutationMock.mockImplementation(({ onError }) => {
+      onErrorCb = onError;
+      return { mutate, isPending: false };
+    });
+    getCompetitionMock.mockReturnValue({ data: COMP_BATTLES_READY });
+    getBracketMock.mockReturnValue({
+      data: {
+        matchups: [
+          {
+            id: 'm-1',
+            roundNumber: 1,
+            bracketPosition: 0,
+            competitorAId: 'a',
+            competitorBId: 'b',
+            seedA: 1,
+            seedB: 4,
+            isBye: false,
+            winnerCompetitorId: null,
+            competitorA: { name: 'Alice', participantId: 'P-A' },
+            competitorB: { name: 'Bob', participantId: 'P-B' },
+          },
+        ],
+      },
+    });
+    const { container, unmount } = await render();
+    await act(async () => {
+      onErrorCb?.({ message: 'Vote failed — try again' });
+    });
+    expect(container.textContent).toContain('Vote failed — try again');
+    unmount();
+  });
+
+  it('persists voted indicator after switching judges and back', async () => {
+    let onSuccessCb: (() => void) | undefined;
+    const mutate = vi.fn();
+    submitOrganizerVoteUseMutationMock.mockImplementation(({ onSuccess }) => {
+      onSuccessCb = onSuccess;
+      return { mutate, isPending: false };
+    });
+    getCompetitionMock.mockReturnValue({ data: COMP_BATTLES_READY });
+    getBracketMock.mockReturnValue({
+      data: {
+        matchups: [
+          {
+            id: 'm-1',
+            roundNumber: 1,
+            bracketPosition: 0,
+            competitorAId: 'a',
+            competitorBId: 'b',
+            seedA: 1,
+            seedB: 4,
+            isBye: false,
+            winnerCompetitorId: null,
+            competitorA: { name: 'Alice', participantId: 'P-A' },
+            competitorB: { name: 'Bob', participantId: 'P-B' },
+          },
+        ],
+      },
+    });
+    const { container, unmount } = await render();
+    // Simulate successful vote as Judge 1 (index 0).
+    await act(async () => {
+      onSuccessCb?.();
+    });
+    expect(container.textContent).toContain('Vote recorded as Judge 1');
+    // Switch to Judge 2, then back to Judge 1.
+    const select = container.querySelector('select[aria-label="Judge slot"]') as HTMLSelectElement;
+    await act(async () => {
+      select.value = '1';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await act(async () => {
+      select.value = '0';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    // Indicator must still show — parent state persisted through remounts.
+    expect(container.textContent).toContain('Vote recorded as Judge 1');
     unmount();
   });
 });
