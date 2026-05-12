@@ -143,15 +143,15 @@ Inputs live in [`_bmad/`](./_bmad), outputs in [`_bmad-output/`](./_bmad-output)
 
 ## Troubleshooting
 
-| Symptom                              | Fix                                                     |
-| ------------------------------------ | ------------------------------------------------------- | ---------------------------------------------------------- |
-| `pnpm setup` fails on docker         | Start Docker Desktop, retry                             |
-| `/sign-in` returns 500 on cold start | Turbopack first-compile quirk — refresh once            |
-| `useTranslations context not found`  | Same as above; transient                                |
-| Postgres connection refused          | `docker compose up -d` then `pnpm doctor`               |
-| Clerk redirect loop                  | Check `NEXT_PUBLIC_CLERK_*_URL` values in `.env.local`  |
-| `pnpm test` runs Playwright          | Update to latest — script now filters out E2E workspace |
-| `Invalid path: /(en                  | es)?...`                                                | Old Clerk middleware bug, fixed in `apps/web/src/proxy.ts` |
+| Symptom                              | Fix                                                        |
+| ------------------------------------ | ---------------------------------------------------------- |
+| `pnpm setup` fails on docker         | Start Docker Desktop, retry                                |
+| `/sign-in` returns 500 on cold start | Turbopack first-compile quirk — refresh once               |
+| `useTranslations context not found`  | Same as above; transient                                   |
+| Postgres connection refused          | `docker compose up -d` then `pnpm doctor`                  |
+| Clerk redirect loop                  | Check `NEXT_PUBLIC_CLERK_*_URL` values in `.env.local`     |
+| `pnpm test` runs Playwright          | Update to latest — script now filters out E2E workspace    |
+| `Invalid path: /(en\|es)?...`        | Old Clerk middleware bug, fixed in `apps/web/src/proxy.ts` |
 
 More: [`docs/troubleshooting.md`](./docs/troubleshooting.md).
 
