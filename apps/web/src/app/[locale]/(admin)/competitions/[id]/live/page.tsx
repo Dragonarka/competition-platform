@@ -2,7 +2,9 @@ import { Suspense } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { DashboardLiveIsland } from '@/components/admin/dashboard-live-island';
 
-export const experimental_ppr = true;
+// The `(admin)/` layout already declares `export const dynamic = 'force-dynamic'`
+// so an `experimental_ppr` directive here would be dead code. Admin routes
+// are Clerk-gated and cannot be partially prerendered.
 
 export default async function LiveDashboardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
