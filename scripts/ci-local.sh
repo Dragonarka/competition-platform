@@ -15,7 +15,7 @@ echo "▶ pnpm typecheck"
 pnpm typecheck
 
 echo "▶ pnpm test (unit — excludes E2E workspace)"
-pnpm test -- --filter='!@competition-platform/tests'
+pnpm turbo run test --filter='!@competition-platform/tests'
 
 echo "▶ pnpm build"
 pnpm build

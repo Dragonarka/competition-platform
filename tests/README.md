@@ -36,12 +36,12 @@ End-to-end Playwright test suite for the competition-platform monorepo. Tests th
    pnpm --filter @competition-platform/db db:migrate
    ```
    Point `TEST_DATABASE_URL` at this DB. **Never** point it at the dev or prod DB — the suite truncates and seeds data per test.
-4. **Create a test organizer in Clerk:** in Clerk dashboard, create a user explicitly for E2E (e.g., `e2e-organizer@example.com`). Capture the Clerk user ID and put it in `TEST_ORGANIZER_CLERK_USER_ID`.
+4. **Create a test organizer in Clerk:** in Clerk dashboard, create a user explicitly for E2E (e.g., `e2e-organizer@example.com`). Capture the Clerk user ID and put it in `TEST_ORGANIZER_CLERK_USER_ID`. Fill in `TEST_ORGANIZER_EMAIL` and `TEST_ORGANIZER_PASSWORD` with that user's credentials — `global.setup.ts` will sign in automatically on the first run.
 5. **Run the suite:**
    ```bash
    pnpm test:e2e
    ```
-   The default `webServer` block in `playwright.config.ts` will spin up the API and web dev servers locally before tests run. In CI, the servers should already be running.
+   On the first run, `global.setup.ts` opens a headless browser, signs in via Clerk, and saves `tests/.auth/organizer.json`. Subsequent runs reuse the cached state. The `webServer` block also auto-starts the API and web servers locally. In CI, the servers should already be running.
 
 ---
 
@@ -51,13 +51,15 @@ End-to-end Playwright test suite for the competition-platform monorepo. Tests th
 tests/
 ├── .env.example             — Env vars template (never commit .env)
 ├── .gitignore               — Excludes test-results/, playwright-report/, .auth/, .env
+├── global.setup.ts          — Clerk sign-in bootstrap; saves .auth/organizer.json once
 ├── package.json             — Workspace package @competition-platform/tests
 ├── tsconfig.json            — Strict TS for test code
 ├── playwright.config.ts     — Main Playwright config (projects, timeouts, reporters)
 ├── e2e/                     — Test specs (one file per user journey)
 │   ├── organizer-create-competition.spec.ts
 │   ├── judge-scoring.spec.ts
-│   └── public-standings.spec.ts
+│   ├── public-standings.spec.ts
+│   └── public-bracket.spec.ts
 └── support/
     ├── fixtures/
     │   ├── index.ts              — Merged fixtures (re-export via mergeTests)
@@ -69,7 +71,8 @@ tests/
     │   └── network.ts            — Offline simulation, throttling, tRPC request waiters
     └── page-objects/
         ├── organizer-dashboard.po.ts
-        └── judge-scoring.po.ts
+        ├── judge-scoring.po.ts
+        └── competition-config.po.ts  — Config page tabs + Live/Simulation links
 ```
 
 ---
@@ -77,6 +80,17 @@ tests/
 ## Fixture Architecture
 
 Playwright fixtures are composed via `mergeTests` in `support/fixtures/index.ts`. Import `test` and `expect` from there — never from `@playwright/test` directly. This keeps custom fixtures (auth, seeded data) available in every spec without per-file imports.
+
+### Global setup (`global.setup.ts`)
+
+`global.setup.ts` runs once before any test worker starts. It:
+
+1. Reads `TEST_ORGANIZER_EMAIL` / `TEST_ORGANIZER_PASSWORD` from `.env`.
+2. If either is missing, logs a warning and exits early (no failure — tests that need auth will fail or be skipped on their own).
+3. If `tests/.auth/organizer.json` already exists, reuses it (delete it to force re-auth).
+4. Otherwise launches a headless Chromium browser, navigates to `/sign-in`, completes the Clerk email + password multi-step form, and saves the resulting storage state.
+
+The cached storage state is then picked up by the `organizerPage` fixture in `auth.fixture.ts`.
 
 ### Auth fixtures
 
@@ -141,30 +155,34 @@ Add to `.github/workflows/*.yml` (example step — not yet wired up):
 
 ## What's Scaffolded vs What's Pending
 
-| Area                                                                        | Status                                                            |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Playwright config with timeouts, reporters, multi-browser + mobile projects | ✅                                                                |
-| Fixture architecture (merged fixtures, auth, data factories)                | ✅                                                                |
-| Page objects (organizer dashboard, judge scoring)                           | ✅ stubs                                                          |
-| Helpers (DB client with RLS, API client, network utilities)                 | ✅                                                                |
-| Sample specs for organizer / judge / public flows                           | ✅ skipped                                                        |
-| Real-DB test database setup guide                                           | ✅                                                                |
-| Auth storageState bootstrap (first-run sign-in script)                      | ⏸️ TODO — add `global.setup.ts` or a one-time manual-sign-in step |
-| GitHub Actions E2E workflow                                                 | ⏸️ TODO — separate TEA workflow (`bmad-tea-testarch-ci`)          |
-| Contract testing (Pact)                                                     | ⏸️ Deferred — not needed until there's an external API consumer   |
-| Coverage reporter                                                           | ⏸️ Post-MVP                                                       |
+| Area                                                                        | Status                                                          |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Playwright config with timeouts, reporters, multi-browser + mobile projects | ✅                                                              |
+| Fixture architecture (merged fixtures, auth, data factories)                | ✅                                                              |
+| Page objects (organizer dashboard, judge scoring, competition config)       | ✅ stubs                                                        |
+| Helpers (DB client with RLS, API client, network utilities)                 | ✅                                                              |
+| Sample specs for organizer / judge / public flows                           | ✅ skipped (7 tests)                                            |
+| Public bracket spec (1 live test, 2 skipped)                                | ✅                                                              |
+| Real-DB test database setup guide                                           | ✅                                                              |
+| Auth storageState bootstrap (`global.setup.ts`)                             | ✅ — auto sign-in via Clerk email/password, caches to `.auth/`  |
+| GitHub Actions E2E workflow                                                 | ⏸️ TODO — separate TEA workflow (`bmad-tea-testarch-ci`)        |
+| Contract testing (Pact)                                                     | ⏸️ Deferred — not needed until there's an external API consumer |
+| Coverage reporter                                                           | ⏸️ Post-MVP                                                     |
 
 ---
 
 ## When to Convert `test.skip` → `test`
 
-| Spec                                        | Unlocks with                                                       |
-| ------------------------------------------- | ------------------------------------------------------------------ |
-| `organizer-create-competition.spec.ts`      | Story 2.1 complete (already done) — needs storageState setup first |
-| `judge-scoring.spec.ts` — valid-link cases  | Story 3.3 complete (already done) + judge-token seeding helper     |
-| `judge-scoring.spec.ts` — 10s cycle         | Story 3.4 complete (score aggregation)                             |
-| `public-standings.spec.ts` — anonymous view | Story 3.4 complete                                                 |
-| `public-standings.spec.ts` — 10s update     | Story 3.4 complete — assert WebSocket-driven update                |
+| Spec                                        | Unlocks with                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------- |
+| `organizer-create-competition.spec.ts`      | `global.setup.ts` runs (credentials in `.env`) + test DB provisioned |
+| `judge-scoring.spec.ts` — valid-link cases  | Story 3.3 complete (already done) + `E2E_JUDGE_TOKEN` set            |
+| `judge-scoring.spec.ts` — 10s cycle         | Story 3.4 complete (score aggregation) + `E2E_JUDGE_TOKEN` set       |
+| `public-standings.spec.ts` — anonymous view | `E2E_COMPETITION_ID` set (seed a live competition first)             |
+| `public-standings.spec.ts` — 10s update     | WebSocket-driven update (Story 3.4) + `E2E_COMPETITION_ID` set       |
+| `public-bracket.spec.ts` — 404 path         | ✅ Runnable immediately (no seeding needed)                          |
+| `public-bracket.spec.ts` — live bracket     | `E2E_COMPETITION_ID` set (competition in bracket phase)              |
+| `public-bracket.spec.ts` — stale state      | `E2E_COMPETITION_ID` set + competition connected to Socket.IO        |
 
 ---
 
@@ -176,4 +194,4 @@ Add to `.github/workflows/*.yml` (example step — not yet wired up):
 
 ---
 
-_Generated by `/bmad-tea-testarch-framework` on 2026-04-24._
+_Initially generated by `/bmad-tea-testarch-framework` on 2026-04-24. Extended on 2026-05-12 (global.setup.ts, competition-config PO, public-bracket spec)._

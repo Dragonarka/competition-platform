@@ -4,8 +4,9 @@ stepsCompleted:
   - 'step-02-generate-pipeline'
   - 'step-03-configure-quality-gates'
   - 'step-04-validate-and-summary'
-lastStep: 'step-04-validate-and-summary'
-lastSaved: '2026-04-24'
+  - 'step-05-extension-pass-2026-05-12'
+lastStep: 'step-05-extension-pass-2026-05-12'
+lastSaved: '2026-05-12'
 ---
 
 # CI/CD Pipeline Setup — Progress Document
@@ -164,3 +165,86 @@ Monorepo with pnpm workspaces + Turborepo.
 5. (Optional) Proceed to `bmad-tea-testarch-atdd` for test generation, `-automate` for coverage expansion, or `-trace` for traceability matrix.
 
 ### Workflow Result: ✅ Complete
+
+---
+
+## Step 5: Extension Pass (2026-05-12)
+
+**Status:** ✅ Complete
+**Date:** 2026-05-12
+**Trigger:** User re-ran `/bmad-tea-testarch-ci` to wire Playwright suite into GitHub Actions
+
+### Context since April 24 run
+
+| Item                     | Then            | Now                                                         |
+| ------------------------ | --------------- | ----------------------------------------------------------- |
+| Git remote               | None configured | `https://github.com/Dragonarka/competition-platform.git` ✅ |
+| `global.setup.ts`        | Not yet added   | Added (this session) — wired into playwright.config.ts ✅   |
+| `public-bracket.spec.ts` | Not yet added   | Added (this session) — 1 live test ✅                       |
+
+### Bugs found and fixed
+
+#### Bug 1: `pnpm test -- --filter=...` passes filter through to workspace scripts (CRITICAL)
+
+**Symptom:** `pnpm test -- --filter='!@competition-platform/tests'` passed the `--filter` flag as an argument to each workspace's `test` script (e.g., `playwright test --filter=!@competition-platform/tests`) instead of using it as a turbo workspace filter.
+
+**Root cause:** In pnpm, `-- args` passes arguments to the underlying script. Turbo receives `turbo run test -- --filter=...`. The `--` separator causes turbo to treat everything after it as workspace script arguments, not turbo-level flags.
+
+**Fix:** Replace `pnpm test -- --filter='!@competition-platform/tests'` with `pnpm turbo run test --filter='!@competition-platform/tests'` everywhere it appeared:
+
+- `.github/workflows/ci.yml` — `pnpm test` now uses correct turbo filter
+- `.github/workflows/test.yml` — unit job now uses correct turbo filter
+- `scripts/ci-local.sh` — same fix
+
+**Impact:** Without this fix, `pnpm test` in `ci.yml` would attempt to run `playwright test` in the E2E workspace without browser binaries installed, causing CI to fail on every push.
+
+**Verification:** `pnpm turbo run test --filter='!@competition-platform/tests'` — 4 workspaces, all passing. `./scripts/ci-local.sh` — passes with `✅ Local CI pass`.
+
+---
+
+#### Bug 2: Clerk middleware uses invalid path-to-regexp v6 patterns (pre-existing Epic 8 bug)
+
+**File:** `apps/web/src/proxy.ts:10`
+
+**Symptom:** Dev server (Turbopack) threw `Error: Invalid path: /(en|es)?/?dashboard(.*). Unexpected MODIFIER at 10, expected END` on every request, crashing the Clerk middleware. The `pnpm test` turbo run also failed because the Playwright webServer started the dev server which had this error, causing the public-bracket 404 test to fail.
+
+**Root cause:** `createRouteMatcher` in Clerk uses path-to-regexp v6. path-to-regexp v6 does not support the `?` modifier on unnamed capture groups like `(en|es)?`. This was introduced during Epic 8 i18n work to match both locale-prefixed and unprefixed routes.
+
+**Fix:** Replaced the 3 invalid `(en|es)?` patterns with 6 explicit patterns — one per locale per route. Since the project uses `as-needed` locale strategy (English: no prefix, Spanish: `/es/` prefix), the explicit list is exact:
+
+```typescript
+// Before (invalid path-to-regexp v6):
+'/(en|es)?/?dashboard(.*)'; // crashes at runtime
+
+// After (explicit, valid):
+'/dashboard(.*)';
+'/es/dashboard(.*)';
+```
+
+Applied to all 3 protected route groups: dashboard, competitions, present.
+
+**Impact:** Dev server middleware no longer crashes. `pnpm turbo run test` passes locally. Production build was unaffected (webpack handles patterns differently from Turbopack).
+
+**Verification:** `pnpm --filter @competition-platform/web typecheck` — clean. `./scripts/ci-local.sh` — passes including `pnpm build` which compiles the middleware as `ƒ Proxy (Middleware)`.
+
+---
+
+### Files modified
+
+| File                         | Change                                                              |
+| ---------------------------- | ------------------------------------------------------------------- |
+| `apps/web/src/proxy.ts`      | Fixed path-to-regexp v6 incompatible route patterns                 |
+| `.github/workflows/ci.yml`   | Added E2E workspace filter to `pnpm test`; correct turbo invocation |
+| `.github/workflows/test.yml` | Fixed turbo filter syntax in unit job                               |
+| `scripts/ci-local.sh`        | Fixed turbo filter syntax                                           |
+
+### Pre-push checklist status
+
+| Item                           | Status                                              |
+| ------------------------------ | --------------------------------------------------- |
+| Git remote configured          | ✅ `github.com/Dragonarka/competition-platform`     |
+| `./scripts/ci-local.sh` passes | ✅ Verified                                         |
+| Clerk secrets documented       | ✅ `docs/ci-secrets-checklist.md`                   |
+| `ENABLE_E2E` variable needed   | ⏸️ User action — set in GitHub Settings → Variables |
+| E2E secrets needed             | ⏸️ User action — set in GitHub Settings → Secrets   |
+| First CI push                  | ⏸️ User action — push to `main` or open a PR        |

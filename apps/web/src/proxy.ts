@@ -4,16 +4,17 @@ import { routing } from './i18n/routing';
 
 const intlMiddleware = createMiddleware(routing);
 
-// Protected routes — match BOTH /dashboard and /es/dashboard etc., so the
-// regex tolerates an optional leading /<locale> segment. The `as-needed`
-// locale prefix means English routes have no prefix; Spanish routes get /es/.
+// Protected routes — cover both the English (no prefix, as-needed strategy)
+// and Spanish (/es/ prefix) variants of each protected path.
+// path-to-regexp v6 (used by createRouteMatcher) does not support unnamed
+// capture groups with the `?` modifier; list each locale explicitly instead.
 const isProtectedRoute = createRouteMatcher([
-  '/(en|es)?/?dashboard(.*)',
   '/dashboard(.*)',
-  '/(en|es)?/?competitions(.*)',
+  '/es/dashboard(.*)',
   '/competitions(.*)',
-  '/(en|es)?/?present/(.*)',
+  '/es/competitions(.*)',
   '/present/(.*)',
+  '/es/present/(.*)',
 ]);
 
 // Compose middlewares: Clerk authenticates first (using its own matcher logic),

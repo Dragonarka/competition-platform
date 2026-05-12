@@ -25,6 +25,7 @@ jobs:
 
       - run: pnpm typecheck
 
-      - run: pnpm test
+      - name: Run unit tests (excluding E2E workspace)
+        run: pnpm turbo run test --filter='!@competition-platform/tests'
 
       - run: pnpm build

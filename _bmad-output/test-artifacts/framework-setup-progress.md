@@ -5,8 +5,9 @@ stepsCompleted:
   - 'step-03-scaffold-framework'
   - 'step-04-docs-and-scripts'
   - 'step-05-validate-and-summary'
-lastStep: 'step-05-validate-and-summary'
-lastSaved: '2026-04-24'
+  - 'step-06-extension-pass-2026-05-12'
+lastStep: 'step-06-extension-pass-2026-05-12'
+lastSaved: '2026-05-12'
 status: 'complete'
 framework: 'Playwright'
 ---
@@ -359,3 +360,43 @@ Contains: quick command reference, first-time setup (install, .env, test DB, Cle
 - `/bmad-tea-testarch-atdd` — generate failing acceptance tests for Story 3-4 BEFORE dev-story (TDD red phase)
 
 ---
+
+---
+
+## Step 6: Extension Pass (2026-05-12)
+
+**Status:** ✅ Complete
+**Date:** 2026-05-12
+**Trigger:** User re-ran `/bmad-tea-testarch-framework` to scaffold against existing route structure
+
+### Gap Inventory from Prior Run
+
+| Gap                                                    | Status Before | Status After |
+| ------------------------------------------------------ | ------------- | ------------ |
+| `global.setup.ts` auth bootstrap                       | ⏸️ TODO       | ✅ Created   |
+| `globalSetup` wired into `playwright.config.ts`        | ⏸️ TODO       | ✅ Done      |
+| Public bracket route spec (`/[competitionId]/bracket`) | ⏸️ Missing    | ✅ Created   |
+| Competition config page object                         | ⏸️ Missing    | ✅ Created   |
+
+### Files Added / Modified
+
+- **NEW** `tests/global.setup.ts` — Runs once before all tests. If `TEST_ORGANIZER_EMAIL` + `TEST_ORGANIZER_PASSWORD` are set, performs Clerk email/password sign-in and saves `tests/.auth/organizer.json`. Returns early (with console warning) when credentials are absent or cache already exists. TypeScript clean.
+- **MODIFIED** `tests/playwright.config.ts` — Added `globalSetup: './global.setup.ts'` to `defineConfig`.
+- **NEW** `tests/support/page-objects/competition-config.po.ts` — Page object for `/competitions/[id]` (config page). Covers all 5 tabs (criteria, participants, competitors, judge-groups, judge-links) and the Live Dashboard / Simulation header links.
+- **NEW** `tests/e2e/public-bracket.spec.ts` — 3 specs for the `/[competitionId]/bracket` route. 1 test is runnable immediately (unknown ID → 404, no auth or seeding required). 2 tests are skipped pending `E2E_COMPETITION_ID`.
+
+### Route Coverage After This Pass
+
+| Route                         | Spec File                              | Status                                |
+| ----------------------------- | -------------------------------------- | ------------------------------------- |
+| `/competitions/new`           | `organizer-create-competition.spec.ts` | ⏸️ Skipped (needs storageState + DB)  |
+| `/judge/[token]`              | `judge-scoring.spec.ts`                | ⏸️ Skipped (needs E2E_JUDGE_TOKEN)    |
+| `/[competitionId]/standings`  | `public-standings.spec.ts`             | ⏸️ Skipped (needs E2E_COMPETITION_ID) |
+| `/[competitionId]/bracket`    | `public-bracket.spec.ts`               | ✅ 1 live test (404 path), 2 skipped  |
+| `/competitions/[id]` (config) | PO only; no spec yet                   | PO ✅                                 |
+| `/competitions/[id]/live`     | —                                      | Not yet                               |
+| `/present/[competitionId]`    | —                                      | Not yet                               |
+
+### TypeScript Validation
+
+All new files pass `pnpm --filter @competition-platform/tests typecheck` without errors.

@@ -12,6 +12,7 @@ const HAS_CLERK = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './global.setup.ts',
   fullyParallel: true,
   forbidOnly: IS_CI,
   retries: IS_CI ? 2 : 0,
