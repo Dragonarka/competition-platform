@@ -1,8 +1,3 @@
----
-title: Workflows
-nav_order: 3
----
-
 # How we ship — BMAD workflows
 
 The project runs on the [BMAD-method](https://github.com/bmad-code-org/BMAD-METHOD) — a structured workflow system for AI-assisted software development. Each phase has a slash-command skill that produces a concrete artifact. Outputs land in `_bmad-output/` and are committed alongside code.

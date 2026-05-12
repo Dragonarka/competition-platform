@@ -2,7 +2,7 @@
 
 Real-time WebSocket competition platform with game theory fairness. Full-stack TypeScript monorepo.
 
-📖 **Architecture & deep docs:** [GitHub Pages site](https://dragonarka.github.io/competition-platform/) (also under [`docs/`](./docs))
+📖 **Architecture & deep docs:** rendered via Docsify in [`docs/`](./docs) — deployable to Vercel as a static site (see [`docs/deploy.md`](./docs/deploy.md#docs-site))
 
 ---
 

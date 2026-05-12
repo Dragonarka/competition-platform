@@ -2,7 +2,7 @@
 
 Real-time WebSocket competition platform with game theory fairness. This file is the single source of truth for **how to work in this repo** — for humans and AI agents alike.
 
-📐 For architecture diagrams and graphical explanations, see [`docs/`](./docs) (also published at the GitHub Pages site).
+📐 For architecture diagrams and graphical explanations, see [`docs/`](./docs) — Docsify site deployable to Vercel (`vercel.json` at repo root).
 🌱 For original vision and decisions, see [`PROJECT-SEED.md`](./PROJECT-SEED.md).
 
 ---

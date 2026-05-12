@@ -1,8 +1,3 @@
----
-title: Troubleshooting
-nav_order: 6
----
-
 # Troubleshooting
 
 Known quirks and their fixes. Run `pnpm doctor` first — it catches most environment issues.

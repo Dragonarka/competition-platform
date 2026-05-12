@@ -1,8 +1,3 @@
----
-title: Architecture
-nav_order: 2
----
-
 # Architecture
 
 Modular monolith. One Next.js process, one NestJS process, one Postgres, one Redis. tRPC for type-safe request/response, Socket.IO for live updates, Clerk for auth, Drizzle for data with row-level security at every protected procedure.

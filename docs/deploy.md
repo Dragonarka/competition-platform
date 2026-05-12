@@ -1,8 +1,3 @@
----
-title: Deploy
-nav_order: 5
----
-
 # Deployment
 
 Current state vs. target state, with a concrete unblock checklist.
@@ -153,3 +148,49 @@ fly deploy --image registry.fly.io/competition-platform:<prev-tag>
 - Fly metrics: <https://fly.io/apps/competition-platform/monitoring>
 - Neon: built-in query insights at console.neon.tech
 - Add Sentry MCP or DataDog when error volume justifies it
+
+---
+
+## Docs site
+
+This documentation is rendered by [Docsify](https://docsify.js.org) (client-side markdown) and deployed to Vercel as a static site. The main repo can stay private.
+
+### One-time setup
+
+```sh
+# from repo root
+npx vercel link              # connects this directory to a Vercel project
+# choose: Create new project, name it competition-platform-docs (or similar)
+# framework: Other, root: ./, output: docs
+
+npx vercel --prod            # first deploy — prints the live URL
+```
+
+The root `vercel.json` already configures:
+
+- `outputDirectory: "docs"` — Vercel serves only the docs folder
+- `framework: null` — no build step (Docsify runs client-side)
+- Correct `Content-Type` headers for `.md` files
+
+Subsequent pushes to `main` redeploy automatically via Vercel's GitHub integration.
+
+### Local preview
+
+```sh
+npx http-server docs -p 8080 -c-1   # any static server works
+# open http://localhost:8080
+```
+
+Or use Vercel's local dev:
+
+```sh
+npx vercel dev
+```
+
+### Add a new doc page
+
+1. Create `docs/your-page.md`.
+2. Add it to `docs/_sidebar.md`.
+3. Commit + push — Vercel redeploys.
+
+Mermaid code blocks (` ```mermaid `) render client-side via the plugin loaded in `docs/index.html`. Search is auto-indexed by the `docsify-search` plugin (same file).

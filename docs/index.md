@@ -1,8 +1,3 @@
----
-title: Competition Platform
-nav_order: 1
----
-
 # Competition Platform
 
 Real-time WebSocket competition platform with game theory fairness. Built as a TypeScript monorepo on Next.js 16 + NestJS 11.
