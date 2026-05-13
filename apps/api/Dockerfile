@@ -33,9 +33,12 @@ RUN pnpm install --frozen-lockfile --prod
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
+# Run from inside the api workspace so node resolves tsx from
+# apps/api/node_modules (pnpm hoists per-workspace, not at root).
+WORKDIR /app/apps/api
 EXPOSE 3001
 # tsx as runtime loader handles TypeScript files from workspace packages
 # (packages/db, packages/shared, etc. expose ./index.ts directly).
-# TODO: replace with `node apps/api/dist/src/main.js` once each workspace
-# package has its own build step emitting JS.
-CMD ["node", "--import", "tsx/esm", "apps/api/dist/src/main.js"]
+# TODO: replace with `node dist/src/main.js` once each workspace package
+# has its own build step emitting JS.
+CMD ["node", "--import", "tsx/esm", "dist/src/main.js"]
