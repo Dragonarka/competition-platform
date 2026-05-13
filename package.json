@@ -14,7 +14,7 @@
     "test:e2e:ui": "pnpm --filter @competition-platform/tests test:ui",
     "test:e2e:install": "pnpm --filter @competition-platform/tests install:browsers",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yaml,yml}\"",
-    "prepare": "husky"
+    "prepare": "husky 2>/dev/null || true"
   },
   "devDependencies": {
     "turbo": "latest",
