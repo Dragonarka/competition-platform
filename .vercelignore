@@ -1,0 +1,9 @@
+# Vercel deploys the /docs site only. Exclude everything else to stay
+# under the 100 MB upload limit and avoid leaking source.
+*
+
+# Re-include the docs site and its config.
+!docs
+!docs/**
+!vercel.json
+!.vercelignore
