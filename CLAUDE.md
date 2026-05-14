@@ -132,6 +132,10 @@ Most-used skills:
 - `/bmad-tea-testarch-trace` — traceability matrix story→test
 - `/bmad-checkpoint-preview` (post-upgrade) — guided pre-commit human review
 
+### Format design (project-specific)
+
+- `/desire-a-format` — critical, agent-led conversation to design a new competition format. Matches against the [predefined catalog](./formats/predefined/) or drafts a structured implementation request. Outputs `formats/desires/desire-*.md` (and `formats/requests/request-*.md` if a new format is needed). Workflow doc: [`formats/README.md`](./formats/README.md).
+
 Diagram: [`docs/workflows.md`](./docs/workflows.md).
 
 ---
