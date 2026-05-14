@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { ArrowRight, Gauge, Trophy, Users } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link, redirect } from '@/i18n/navigation';
+import { Logo } from '@/components/brand/logo';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -32,7 +33,10 @@ export default async function LocaleRoot({ params }: { params: Promise<{ locale:
       />
 
       <header className="flex items-center justify-between px-6 py-5 sm:px-12">
-        <span className="font-heading text-base font-semibold tracking-tight">{t('brand')}</span>
+        <span className="flex items-center gap-2 font-heading text-base font-semibold tracking-tight">
+          <Logo size={22} className="text-primary" />
+          {t('brand')}
+        </span>
         <div className="flex items-center gap-2">
           <Link href="/sign-in" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
             {t('signIn')}

@@ -2,6 +2,7 @@
 
 import { LayoutDashboard, Trophy, type LucideIcon } from 'lucide-react';
 import { Link, usePathname } from '@/i18n/navigation';
+import { Logo } from '@/components/brand/logo';
 import { cn } from '@/lib/utils';
 
 type IconKey = 'dashboard' | 'trophy';
@@ -23,7 +24,7 @@ export function AdminSidebar({ items, brand }: { items: AdminNavItem[]; brand: s
     <aside className="hidden w-56 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground lg:flex">
       <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
         <span className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Trophy className="size-4" />
+          <Logo size={16} />
         </span>
         <span className="font-heading text-sm font-semibold tracking-tight">{brand}</span>
       </div>

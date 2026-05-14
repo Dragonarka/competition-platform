@@ -1,6 +1,6 @@
-import { Trophy } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
+import { Logo } from '@/components/brand/logo';
 import { LanguageSwitcher } from '@/components/i18n/language-switcher';
 
 export default async function AuthLayout({
@@ -27,7 +27,7 @@ export default async function AuthLayout({
           className="relative z-10 inline-flex items-center gap-2 font-heading text-sm font-semibold tracking-tight"
         >
           <span className="flex size-7 items-center justify-center rounded-md bg-primary-foreground/15 backdrop-blur-sm">
-            <Trophy className="size-4" />
+            <Logo size={16} />
           </span>
           {tApp('title')}
         </Link>

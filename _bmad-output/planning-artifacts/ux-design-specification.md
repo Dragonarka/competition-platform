@@ -14,6 +14,32 @@ author: Dragonarka
 
 **Author:** Dragonarka
 **Date:** 2026-03-30
+**Last alignment:** 2026-05-14 — see [Implementation alignment](#implementation-alignment-2026-05-14) below.
+
+---
+
+## Implementation alignment (2026-05-14)
+
+The original spec (2026-03-30) prescribed a stack and palette that drifted from what shipped to production. This section is the source of truth for the **as-built** design system; the rest of the document is preserved for intent and rationale, but where it conflicts with this section, this section wins.
+
+| Topic                | Spec (2026-03-30)                            | As-built (2026-05-14)                                                                                                                                                                                                      |
+| -------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Headless primitives  | Radix UI                                     | **Base UI** (`@base-ui/react`) — same accessibility guarantees, simpler API surface, no portal-by-default.                                                                                                                 |
+| Component layer      | shadcn/ui (copied components)                | **shadcn-style** primitives copied into `apps/web/src/components/ui/` (Button, Card, Input, Textarea, Label, Skeleton, Tabs, EmptyState, PageHeader, StatusBadge). CVA-driven variants.                                    |
+| Dashboard components | Tremor                                       | **None** — Tailwind primitives + Card + StatusBadge cover current needs. Add Tremor only when charts/KPIs ship.                                                                                                            |
+| Animation            | Framer Motion                                | **tw-animate-css** (`animate-in fade-in slide-in-from-*`, etc.) + one custom `@keyframes pulse-ring` for live indicators. Framer Motion deferred — no JS animation library currently bundled.                              |
+| Body / UI font       | Inter                                        | **Geist Sans** (`next/font/google`, variable `--font-geist-sans`).                                                                                                                                                         |
+| Monospace            | JetBrains Mono                               | **Geist Mono** (`--font-geist-mono`). Used for score values and identifiers.                                                                                                                                               |
+| Display / heading    | (same as body)                               | **Bricolage Grotesque** (`--font-bricolage` → `--font-heading`). Used for landing hero, page titles, `CardTitle`, and other `font-heading` slots. Adds geometric personality consistent with competition energy.           |
+| Brand accent         | `#3B82F6` (blue-500)                         | **`oklch(0.55 0.22 264)` light / `oklch(0.65 0.22 264)` dark** — saturated purple-blue, OKLCH for perceptual uniformity across light/dark, applied to `--primary` and downstream Button default, Link, StatusBadge `live`. |
+| Base neutrals        | zinc scale, hex                              | **OKLCH achromatic** scale defined in `apps/web/src/app/globals.css` (`@theme inline`). Values: `oklch(0.145 0 0)` foreground / `oklch(1 0 0)` background light, mirrored dark.                                            |
+| Spacing base         | 4px hard-coded scale                         | Tailwind 4 default (4px-based), with `--radius` chain (`--radius: 0.625rem`; sm/md/lg/xl/2xl/3xl/4xl computed). Component sizing follows the spec's targets (touch ≥56px on judge mobile).                                 |
+| Sidebar token suite  | Not in spec                                  | Full `--sidebar-*` palette in theme (sidebar/foreground/primary/accent/border/ring) — drives admin layout active-route highlighting at lg+ breakpoint, with collapsed icon rail below.                                     |
+| Landing surface      | Not in spec (locale root redirected blindly) | **Built**: `/[locale]/page.tsx` is now an unauthenticated landing with brand mark, hero, three feature cards, and dual CTA. Signed-in users still redirect to `/dashboard`.                                                |
+| Auth chrome          | "Centered shell"                             | **Two-column**: brand panel left (gradient on `--primary`, trophy + tagline + subtitle), Clerk widget right. `LanguageSwitcher` top-right of the form pane.                                                                |
+| Admin shell          | Sidebar + header                             | **Labeled sidebar** at lg+ (240px → `w-56`) with sidebar tokens for active state, icon rail at <lg, sticky `backdrop-blur` header with `UserButton`.                                                                       |
+
+**Status colors stay sacred.** Success/warning/error/info tokens kept their semantic meaning from the original spec; the new brand accent does **not** displace `--destructive`, and the `StatusBadge` primitive enforces the variant API (`success | warning | danger | live | idle | neutral`) so consumers never reach for raw color classes.
 
 ---
 
@@ -379,17 +405,18 @@ What it nails:
 
 ### Design System Choice
 
-**Primary Stack: shadcn/ui + Tremor + Framer Motion on Tailwind CSS**
+**Primary Stack (as-built, 2026-05-14): shadcn-style primitives + Base UI + CVA + tw-animate-css on Tailwind 4**
 
-A layered component architecture built on Tailwind CSS as the unified styling foundation:
+> Original spec called for shadcn/ui + Tremor + Framer Motion. See [Implementation alignment](#implementation-alignment-2026-05-14) for the diff. The layered architecture below reflects what shipped.
 
-| Layer                    | Library       | Role                                                                                                                                                                 |
-| ------------------------ | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Styling**              | Tailwind CSS  | Utility-first CSS framework. Single styling language across all views.                                                                                               |
-| **Primitives**           | Radix UI      | Headless accessible components (underneath shadcn/ui). Handles focus management, keyboard navigation, ARIA attributes automatically.                                 |
-| **General Components**   | shadcn/ui     | Buttons, forms, dialogs, navigation, cards, inputs. Copy-paste architecture — components live in the project, not in node_modules. Full ownership and customization. |
-| **Dashboard Components** | Tremor        | Charts, stat cards, KPI indicators, data tables, progress bars. Purpose-built for mission control interfaces. Tailwind-native.                                       |
-| **Animation**            | Framer Motion | Score submission confirmations, bracket transitions, phase progression animations, layout transitions. Gesture support for mobile touch interactions.                |
+| Layer                    | Library                        | Role                                                                                                                                                               |
+| ------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Styling**              | Tailwind 4 (`@theme inline`)   | Utility-first CSS framework. Theme tokens live in `globals.css`, not a JS config.                                                                                  |
+| **Primitives**           | Base UI (`@base-ui/react`)     | Headless accessible components (Button, Tabs at minimum). Focus management, keyboard nav, ARIA handled automatically. Simpler than Radix; no portal-by-default.    |
+| **Variants**             | class-variance-authority       | All component variants (Button, StatusBadge, …) declared through CVA so every option is exhaustively typed in TS.                                                  |
+| **General Components**   | shadcn-style (copied locally)  | Buttons, forms, cards, tabs, inputs, plus newer additions (EmptyState, PageHeader, StatusBadge). Files live in `apps/web/src/components/ui/`. Full ownership.      |
+| **Dashboard Components** | None yet (Tailwind primitives) | Mission-control views use `Card`, `StatusBadge`, plain tables. Tremor remains an option once charts/KPIs are formalised — not adopted at MVP.                      |
+| **Animation**            | tw-animate-css + 1 keyframe    | `animate-in fade-in slide-in-from-bottom-*`, etc., for entry/exit transitions; custom `@keyframes pulse-ring` for the live-indicator dot. No JS animation library. |
 
 ### Rationale for Selection
 
@@ -407,26 +434,27 @@ A layered component architecture built on Tailwind CSS as the unified styling fo
 
 ### Implementation Approach
 
-**Component Strategy by View:**
+**Component Strategy by View (as-built):**
 
-| View                                | Primary Library     | Key Components                                                                                    |
-| ----------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------- |
-| **Judge Scoring (mobile)**          | shadcn/ui           | Large number inputs, submit button, status badges, score cards                                    |
-| **Organizer Dashboard (desktop)**   | Tremor + shadcn/ui  | Stat cards, progress charts, status indicators, data tables, real-time score aggregation displays |
-| **Presenter Teleprompter (mobile)** | shadcn/ui (minimal) | Large text display, competitor name cards, phase indicator                                        |
-| **Competition Setup (desktop)**     | shadcn/ui           | Form wizard, select menus, format configuration cards, step indicators                            |
-| **Competitor View (mobile)**        | shadcn/ui + Tremor  | Standings table, bracket visualization, match cards                                               |
+| View                              | Primary Library             | Key Components                                                                                                         |
+| --------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **Public landing**                | shadcn-style + StatusBadge  | Brand mark, hero with `font-heading` headline, three feature `Card`s, dual CTA Links styled via `buttonVariants`.      |
+| **Auth (sign-in / sign-up)**      | shadcn-style + Clerk widget | Two-column layout: brand panel (gradient on `--primary`) + Clerk `<SignIn>` / `<SignUp>` slot.                         |
+| **Judge Scoring (mobile)**        | shadcn-style                | Score inputs (`JudgeScoreInput` from format SDK), submit button, status badges, offline-queue draft persistence.       |
+| **Organizer Dashboard (desktop)** | shadcn-style                | `PageHeader`, `Card`, `StatusBadge`, plain tables, `Skeleton` loaders. Charts/Tremor deferred.                         |
+| **Presenter View (large screen)** | shadcn-style + tw-animate   | Large `font-heading` text, status badges with `live` variant + `pulse-ring`, phase indicator pills.                    |
+| **Competition Setup (desktop)**   | shadcn-style + Tabs         | Tabbed config (criteria / participants / competitors / judge-groups / judge-links), CVA-variant form controls.         |
+| **Public Standings / Bracket**    | shadcn-style + PageHeader   | `PageHeader` with live `StatusBadge` and `ShareLinkButton`; standings/bracket client islands stream WebSocket updates. |
 
-**Animation Strategy:**
+**Animation Strategy (as-built):**
 
-| Interaction                   | Animation Type                                       | Library                                  |
-| ----------------------------- | ---------------------------------------------------- | ---------------------------------------- |
-| Score submission confirmation | Color flash (gray → green) + subtle scale            | Framer Motion                            |
-| Score sync status             | Checkmark appear animation (✓ → ✓✓)                  | Framer Motion                            |
-| Bracket progression           | Layout transition with shared element animation      | Framer Motion layoutId                   |
-| Phase transition              | Slide/fade between phase views                       | Framer Motion AnimatePresence            |
-| Dashboard data updates        | Number counting animation for live score aggregation | Framer Motion + React Spring (if needed) |
-| List reordering (standings)   | Auto-animate position changes                        | Framer Motion layout                     |
+| Interaction                                                | Animation                                  | Mechanism                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| Live indicator (presenter, public, badge `variant="live"`) | Dot with expanding ring                    | Custom `@keyframes pulse-ring` (globals.css) + `animate-pulse-ring` utility               |
+| Score submission confirmation                              | Color/state change via `data-*` attributes | Tailwind transitions on `aria-*` / `data-*`; no JS animation                              |
+| Skeleton loaders                                           | Pulse                                      | Tailwind `animate-pulse`                                                                  |
+| Suspense / island reveal                                   | Fade + slide                               | `tw-animate-css` (`animate-in fade-in slide-in-from-bottom-2 duration-500`) where applied |
+| Future: bracket / list reorder                             | TBD                                        | Either Tailwind View Transitions or `framer-motion` when the need is concrete             |
 
 ### Customization Strategy
 
@@ -468,6 +496,29 @@ competition-platform's defining experience is not a single interaction but a **r
 | **Competitor (André)** | "See your results live"   | "The second the judges finished scoring, I saw my ranking update on my phone"                  |
 
 The magic is that these three moments are **the same moment** — the judge submits, the organizer's dashboard updates, the competitor's standings change. One action, three simultaneous experiences. This is what no spreadsheet, WhatsApp group, or manual process can replicate.
+
+```mermaid
+flowchart LR
+    J["Judge taps score"]
+    API["NestJS API<br/>(tRPC + RLS)"]
+    DB[("Postgres")]
+    R[("Redis pub/sub")]
+    O["Organizer dashboard<br/>(live)"]
+    P["Presenter view"]
+    C["Competitor / public<br/>standings + bracket"]
+
+    J -->|tRPC score.submit| API
+    API -->|RLS tx| DB
+    API -->|emit score.updated| R
+    R --> O
+    R --> P
+    R --> C
+
+    classDef brand fill:#7e4cf0,stroke:#5b2fb8,color:#fff
+    class API,R brand
+```
+
+One action on the judge's phone fans out to three simultaneous re-renders. The Redis pub/sub channel is what makes it a _single moment_ across viewers — there is no polling, no delay, no manual refresh anywhere in the loop.
 
 ### User Mental Models
 
@@ -527,6 +578,33 @@ André's mental model is a scoreboard. He checks it, sees his position, and eith
 ### Experience Mechanics
 
 #### Judge Scoring Flow ("Score and go")
+
+```mermaid
+flowchart TB
+    A["Open invite link"] --> B["Enter name"]
+    B --> C{"Cypher phase<br/>active?"}
+    C -- "no" --> W["Waiting screen<br/>(connection badge live)"]
+    W -. socket event .-> D
+    C -- "yes" --> D["Scoring screen<br/>(competitor + criteria)"]
+    D --> E["Tap score values<br/>(saved locally per keystroke)"]
+    E --> F["Tap Submit (≥56px target)"]
+    F --> G{"Online?"}
+    G -- "yes" --> H["✓ sent → ✓✓ confirmed<br/>(<200ms)"]
+    G -- "no"  --> Q["✓ queued offline<br/>(localStorage)"]
+    Q -. reconnect .-> H
+    H --> I{"More competitors<br/>in this round?"}
+    I -- "yes" --> D
+    I -- "no"  --> J["Round complete · waiting for next"]
+    H -. "≤30s window" .-> U["Undo last score<br/>(non-blocking)"]
+    U --> D
+
+    classDef happy fill:#16a34a,stroke:#15803d,color:#fff
+    classDef warn  fill:#eab308,stroke:#a16207,color:#000
+    class H happy
+    class Q warn
+```
+
+The legacy step-by-step description is preserved below for narrative context.
 
 ```
 1. INITIATION
@@ -668,15 +746,15 @@ André's mental model is a scoreboard. He checks it, sees his position, and eith
 | `--text-secondary` | `#71717A` (zinc-500) | `#A1A1AA` (zinc-400) | Labels, secondary info, timestamps |
 | `--text-muted`     | `#A1A1AA` (zinc-400) | `#71717A` (zinc-500) | Placeholders, disabled text        |
 
-**Brand Accent:**
+**Brand Accent (as-built, OKLCH):**
 
-| Token            | Value                 | Usage                                              |
-| ---------------- | --------------------- | -------------------------------------------------- |
-| `--accent`       | `#3B82F6` (blue-500)  | Primary actions, links, active states, focus rings |
-| `--accent-hover` | `#2563EB` (blue-600)  | Hover state for accent elements                    |
-| `--accent-muted` | `#DBEAFE` / `#1E3A5F` | Accent backgrounds (light/dark)                    |
+| Token                  | Light                                             | Dark                                                                       | Usage                                                                                  |
+| ---------------------- | ------------------------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `--primary`            | `oklch(0.55 0.22 264)`                            | `oklch(0.65 0.22 264)`                                                     | Default Button, Link "default", landing/auth hero, `StatusBadge variant="live"` accent |
+| `--primary-foreground` | `oklch(0.985 0 0)`                                | `oklch(0.985 0 0)`                                                         | Text/icon on primary surfaces                                                          |
+| (`pulse-ring` color)   | `oklch(0.65 0.22 264 / 0.6)` (same in both modes) | Live-indicator ring animation source-of-truth, defined in the `@keyframes` |
 
-Rationale: Blue is the universal "trust + professional" color. It doesn't compete with status colors (green/yellow/red) and reads well in both light and dark mode. Muted enough to not dominate the interface.
+Rationale: A single saturated hue at h=264 (purple-blue) reads as "trust + energy" — professional like spec'd blue, but warmer and more memorable. Defined in OKLCH so the same hue at different lightness values reads as perceptually the same color across light/dark mode — something hex/RGB cannot guarantee. Does not compete with the sacred status colors (green/yellow/red) below.
 
 **Status Colors (Sacred — never used for branding):**
 
@@ -709,11 +787,15 @@ Rationale: Blue is the universal "trust + professional" color. It doesn't compet
 
 ### Typography System
 
-**Primary Font: Inter**
-The industry standard for professional, data-dense interfaces. Used by Linear, Vercel, GitHub, Figma. Optimized for screen readability at all sizes, with excellent number legibility — critical for score displays.
+**As-built triad (2026-05-14): Geist Sans + Geist Mono + Bricolage Grotesque.**
 
-**Monospace Font: JetBrains Mono**
-For score values, numeric data, competitor numbers, and code-like identifiers. Tabular figures ensure numbers align perfectly in columns and score displays.
+| Font                    | CSS variable                               | Role                                                                                                                                                                |
+| ----------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Geist Sans**          | `--font-geist-sans` (also `--font-sans`)   | Body text, UI controls, table cells, form fields. Geometric, neutral, optimised for screen. Replaces spec'd Inter.                                                  |
+| **Geist Mono**          | `--font-geist-mono` (also `--font-mono`)   | Score values, identifiers, IDs, code-shaped text. Tabular figures via the Geist family. Replaces spec'd JetBrains Mono.                                             |
+| **Bricolage Grotesque** | `--font-bricolage` (also `--font-heading`) | Display surfaces — landing hero (`text-6xl`), page titles (`PageHeader`), `CardTitle`, empty-state titles. Geometric display feel with personality, used sparingly. |
+
+All three load via `next/font/google` in `apps/web/src/app/[locale]/layout.tsx` and are exposed as CSS variables on `<html>`. Tailwind 4 `@theme inline` maps them to `font-sans` / `font-mono` / `font-heading` utilities.
 
 **Type Scale (tight, efficient):**
 
