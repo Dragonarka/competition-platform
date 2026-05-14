@@ -21,6 +21,7 @@ interface FormCoreProps {
 
 function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormCoreProps) {
   const router = useRouter();
+  const utils = trpc.useUtils();
   const t = useTranslations('Competitions.form');
   const tCompetitions = useTranslations('Competitions');
   const tCommon = useTranslations('Common');
@@ -35,12 +36,14 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
 
   const createMutation = trpc.tournament.create.useMutation({
     onSuccess(data) {
+      utils.tournament.list.invalidate();
       router.push(`/competitions/${data.id}`);
     },
   });
 
   const createSimMutation = trpc.tournament.createSimulation.useMutation({
     onSuccess(data) {
+      utils.tournament.list.invalidate();
       router.push(`/competitions/${data.id}`);
     },
   });

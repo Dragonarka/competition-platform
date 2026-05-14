@@ -64,7 +64,7 @@
       "nameLabel": "Name",
       "namePlaceholder": "e.g. Summer Dance Battle 2026",
       "namePlaceholderSimulation": "e.g. Practice Session 01",
-      "dateLabel": "Date",
+      "dateLabel": "Start date",
       "descriptionLabel": "Description",
       "descriptionPlaceholder": "Optional description of the competition",
       "mockParticipantsLabel": "Mock Participants",
