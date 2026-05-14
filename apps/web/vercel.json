@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "buildCommand": "cd ../.. && pnpm turbo run build --filter=@competition-platform/web",
+  "outputDirectory": ".next",
+  "ignoreCommand": "cd ../.. && pnpm turbo run build --filter=@competition-platform/web --dry-run=json | grep -q '\"task\": \"@competition-platform/web#build\"' && exit 1 || exit 0"
+}
