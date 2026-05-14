@@ -1,20 +1,10 @@
-# Deployment
+# Deployment — Operational Guide
 
-Current state vs. target state, with a concrete unblock checklist.
+The stack is **live** as of 2026-05-14. This page is the operational reference: what runs where, how to redeploy, how to rotate secrets, how to add a new region.
 
-## Current state
+For the historical "how we got here" account, see the [Changelog](./changelog.md).
 
-| Component       | Status                       | Where                                  |
-| --------------- | ---------------------------- | -------------------------------------- |
-| API             | Configured, **not deployed** | `apps/api/Dockerfile`, `fly.toml`      |
-| Web             | **No deploy config**         | —                                      |
-| Postgres        | Local Docker only            | `docker-compose.yml`                   |
-| Redis           | Local Docker only            | `docker-compose.yml`                   |
-| Auth            | Clerk dev tenant works       | `.env.local`                           |
-| CI pipeline     | Active                       | `.github/workflows/ci.yml`, `test.yml` |
-| Deploy pipeline | **Gated off**                | `.github/workflows/deploy.yml`         |
-
-## Target state
+## Current topology
 
 ```mermaid
 flowchart TB
@@ -22,23 +12,24 @@ flowchart TB
         B["Browser"]
     end
 
-    subgraph Vercel["Vercel · global edge"]
-        Wapp["Next.js 16<br/>SSR + ISR"]
+    subgraph Vercel["Vercel · iad1 build · global CDN"]
+        Wapp["Next.js 16<br/>competition-platform-web-green<br/>.vercel.app"]
+        Docs["Docsify static<br/>competition-platform-docs<br/>.vercel.app"]
     end
 
-    subgraph FlyBog["Fly.io · bog (Bogotá)"]
-        Api["NestJS API<br/>scale-to-zero<br/>512 MB shared VM"]
+    subgraph FlyGru["Fly.io · gru (São Paulo) · 2× shared-cpu-1x · 512 MB"]
+        Api["NestJS API<br/>competition-platform<br/>.fly.dev<br/>scale-to-zero"]
     end
 
-    subgraph Neon["Neon Serverless · sa-east"]
-        DB[("Postgres 16<br/>(pooled)")]
+    subgraph NeonUSE["Neon · us-east-1 (TODO: sa-east-1)"]
+        DB[("Postgres 17<br/>free tier · pooled<br/>scale-to-zero")]
     end
 
-    subgraph Upstash["Upstash · global"]
-        Cache[("Redis 7")]
+    subgraph Upstash["Upstash via Fly · gru"]
+        Cache[("Redis 7<br/>pay-as-you-go")]
     end
 
-    Clerk["Clerk auth"]
+    Clerk["Clerk · pk_test_*<br/>(test instance)"]
 
     B --> Wapp
     Wapp -->|tRPC over HTTPS| Api
@@ -48,149 +39,193 @@ flowchart TB
     Api --> DB
     Api --> Cache
 
-    style FlyBog stroke:#7c3aed,stroke-width:2px
-    style Neon stroke:#0891b2,stroke-width:2px
+    style FlyGru stroke:#7c3aed,stroke-width:2px
+    style NeonUSE stroke:#0891b2,stroke-width:2px,stroke-dasharray: 5 5
     style Upstash stroke:#dc2626,stroke-width:2px
 ```
 
-## Unblock checklist
+Dashed border = pending migration.
 
-### 1. Provision data plane (15–20 min)
+## Day-to-day commands
 
-| Step            | Where                                                                             | Output                |
-| --------------- | --------------------------------------------------------------------------------- | --------------------- |
-| Create Postgres | <https://console.neon.tech> → New project (sa-east-1)                             | Pooled `DATABASE_URL` |
-| Migrate schema  | locally: `DATABASE_URL=<neon-url> pnpm --filter @competition-platform/db db:push` | Tables created        |
-| Create Redis    | <https://console.upstash.com> → New database (Global)                             | `REDIS_URL`           |
+### Redeploy the API
 
-### 2. Configure Fly.io (10 min)
+After pushing to `main`:
 
 ```sh
-# install flyctl (one-time)
-brew install flyctl
-
-# log in and create the app (if not already)
-fly auth login
-fly apps create competition-platform   # or whatever fly.toml says
-
-# set secrets on the app
-fly secrets set \
-  DATABASE_URL="<neon-pooled-url>" \
-  REDIS_URL="<upstash-url>" \
-  CLERK_SECRET_KEY="<sk_live_...>" \
-  --app competition-platform
-
-# generate a deploy token for CI
-fly tokens create deploy --name github-actions
-```
-
-### 3. Wire GitHub secrets/variables
-
-| Type     | Name                                | Value               |
-| -------- | ----------------------------------- | ------------------- |
-| Variable | `ENABLE_DEPLOY`                     | `true`              |
-| Variable | `ENABLE_E2E`                        | `true`              |
-| Secret   | `FLY_API_TOKEN`                     | (from step 2)       |
-| Secret   | `DATABASE_URL`                      | Neon pooled URL     |
-| Secret   | `REDIS_URL`                         | Upstash URL         |
-| Secret   | `CLERK_SECRET_KEY`                  | `sk_live_...`       |
-| Secret   | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | `pk_live_...`       |
-| Secret   | `TEST_ORGANIZER_EMAIL`              | E2E-only Clerk user |
-| Secret   | `TEST_ORGANIZER_PASSWORD`           | E2E-only Clerk user |
-| Secret   | `TEST_ORGANIZER_CLERK_USER_ID`      | Clerk user ID       |
-
-Full list: [`ci-secrets-checklist.md`](./ci-secrets-checklist.md).
-
-### 4. Deploy the API
-
-```sh
-# manual first deploy
 fly deploy --remote-only --app competition-platform
-
-# OR push to main and let deploy.yml do it
-git push origin main
 ```
 
-### 5. Decide web deploy target
+Or wire up the GitHub integration so push-to-main auto-deploys via `.github/workflows/deploy.yml` (gated by `ENABLE_DEPLOY=true`).
 
-| Option                   | Pros                                                                                 | Cons                                                                            |
-| ------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| **Vercel** (recommended) | Zero-config Next.js 16, edge SSR, ISR, automatic preview deploys, free tier generous | Vendor-lock on edge features; tunnel from edge → Fly API has cold-start latency |
-| **Fly.io** (second app)  | Co-located with API in Bogotá; lower latency tRPC; one provider                      | Need a second `Dockerfile` + `fly.toml.web`; no edge ISR; manual prev deploys   |
+### Redeploy the web app
 
-Recommended path: Vercel for v1 (ship fast), reconsider if tRPC latency from Vercel edge → Fly Bogotá becomes an issue.
-
-For Vercel:
+From `apps/web/`:
 
 ```sh
-# from repo root
-npx vercel link              # connect the Next.js app
+npx vercel --prod --yes
+```
+
+Or wire up the Vercel GitHub integration so push-to-main auto-deploys.
+
+### Tail logs
+
+```sh
+fly logs --app competition-platform                 # API
+npx vercel logs <deployment-url> -f                 # Web
+```
+
+### Connect to the database
+
+```sh
+fly mpg connect --cluster <id>                      # (not used currently)
+psql "$DATABASE_URL"                                # against Neon directly
+```
+
+Or open Neon's web console at <https://console.neon.tech>.
+
+### Connect to Redis
+
+```sh
+fly redis connect competition-platform-redis
+```
+
+### List/rotate secrets
+
+```sh
+fly secrets list --app competition-platform
+fly secrets set CLERK_SECRET_KEY="sk_..." --app competition-platform
+# Setting any secret triggers a rolling restart.
+```
+
+```sh
+# Vercel
+npx vercel env ls
+npx vercel env rm CLERK_SECRET_KEY production
 npx vercel env add CLERK_SECRET_KEY production
-# add all NEXT_PUBLIC_* + NEXT_PUBLIC_API_URL pointing at Fly app
-npx vercel --prod
 ```
 
-Then add the Vercel URL to Clerk → Paths → Allowed origins.
+## Configured secrets
 
-## Rollback
+### Fly.io (`competition-platform`)
+
+| Key                                 | Why                                                          |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `DATABASE_URL`                      | Neon **pooled** URL (must include `-pooler` in host)         |
+| `REDIS_URL`                         | Upstash URL from `fly redis create`                          |
+| `CLERK_SECRET_KEY`                  | Backend JWT verification                                     |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Set on API too for convenience; only used at build time      |
+| `WEB_URL`                           | CORS origin allowlist — must match the Vercel production URL |
+
+### Vercel (web)
+
+| Key                                 | Why                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_API_URL`               | `https://competition-platform.fly.dev` — used by client and tRPC rewrite |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Browser Clerk init                                                       |
+| `CLERK_SECRET_KEY`                  | Server-side Clerk verification in middleware                             |
+
+## Common operational tasks
+
+### Pre-warm before a competition
+
+Both API (Fly) and DB (Neon) scale to zero. Cold start is ~3.5s on API + ~1-3s on Neon. To pre-warm:
 
 ```sh
-# Fly: rollback to previous image
-fly releases --app competition-platform
-fly deploy --image registry.fly.io/competition-platform:<prev-tag>
-
-# Vercel: promote a previous deployment via dashboard or `vercel rollback`
+curl https://competition-platform.fly.dev/health
+# Optional: trigger one tRPC call that hits the DB to wake Neon
 ```
 
-## Monitoring (post-deploy)
+The first organizer hitting `/sign-in` does this implicitly.
 
-- Fly logs: `fly logs --app competition-platform`
-- Fly metrics: <https://fly.io/apps/competition-platform/monitoring>
-- Neon: built-in query insights at console.neon.tech
-- Add Sentry MCP or DataDog when error volume justifies it
+### Migrate Postgres to `sa-east-1` (pending)
 
----
+```sh
+# 1. Create new Neon project in sa-east-1
+# 2. Run migrations against it:
+DATABASE_URL="<new-direct-url>" pnpm --filter @competition-platform/db db:push
+
+# 3. Dump + restore data if there's any
+pg_dump "<old-direct-url>" | psql "<new-direct-url>"
+
+# 4. Swap Fly secret to the new pooled URL
+fly secrets set DATABASE_URL="<new-pooled-url>" --app competition-platform
+
+# 5. Wait for rolling restart to finish, then delete the old Neon project.
+```
+
+Latency improvement: ~120ms → ~10ms round-trip from Fly `gru` to Neon `sa-east-1`.
+
+### Switch Clerk to production instance
+
+```sh
+# In Clerk dashboard: create production instance, verify a domain.
+# Get sk_live_* and pk_live_* keys.
+
+fly secrets set CLERK_SECRET_KEY="sk_live_..." \
+                NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="pk_live_..." \
+                --app competition-platform
+
+npx vercel env rm NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY production
+npx vercel env add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY production
+npx vercel env rm CLERK_SECRET_KEY production
+npx vercel env add CLERK_SECRET_KEY production
+npx vercel --prod --yes
+```
+
+Add the verified domain to Clerk's allowed origins.
+
+### Roll back the API
+
+```sh
+fly releases --app competition-platform
+fly deploy --image registry.fly.io/competition-platform:<prev-tag> --app competition-platform
+```
+
+### Roll back the web
+
+```sh
+npx vercel rollback                                 # interactive: pick a previous deployment
+# Or promote a specific deployment URL:
+npx vercel promote <deployment-url> --prod
+```
+
+## Cost reference
+
+| Resource            | Plan                               | Cost                                             |
+| ------------------- | ---------------------------------- | ------------------------------------------------ |
+| Fly API             | shared-cpu-1x · 512MB · 2 machines | $0 idle (scale-to-zero), pennies per active hour |
+| Neon Postgres       | Free                               | $0 (0.5GB · 190 hr compute)                      |
+| Upstash Redis       | Pay-as-you-go                      | $0.20 per 100K commands · $0 idle                |
+| Vercel (web + docs) | Hobby                              | $0 (free tier)                                   |
+| Clerk               | Test                               | $0                                               |
+
+**Total: $0/mo when idle, expected ~$0.10/hr during active competitions.**
+
+## Monitoring
+
+- **Fly logs / metrics**: `fly logs` or <https://fly.io/apps/competition-platform/monitoring>
+- **Neon queries / compute**: <https://console.neon.tech>
+- **Upstash commands / latency**: <https://console.upstash.com>
+- **Vercel function logs**: `npx vercel logs <url> -f`
+- **Clerk auth events**: <https://dashboard.clerk.com>
+
+Consider adding Sentry MCP or DataDog once error volume justifies it.
 
 ## Docs site
 
 This documentation is rendered by [Docsify](https://docsify.js.org) (client-side markdown) and deployed to Vercel as a static site. The main repo can stay private.
 
-### One-time setup
+### Deploy a doc change
 
-```sh
-# from repo root
-npx vercel link              # connects this directory to a Vercel project
-# choose: Create new project, name it competition-platform-docs (or similar)
-# framework: Other, root: ./, output: docs
+1. Edit any `.md` in `docs/`.
+2. Commit + push to `main`. Vercel's GitHub integration redeploys (once enabled).
+3. Or manually: `npx vercel --prod` from the repo root with the docs project's `.vercel/` linked.
 
-npx vercel --prod            # first deploy — prints the live URL
-```
-
-The root `vercel.json` already configures:
-
-- `outputDirectory: "docs"` — Vercel serves only the docs folder
-- `framework: null` — no build step (Docsify runs client-side)
-- Correct `Content-Type` headers for `.md` files
-
-Subsequent pushes to `main` redeploy automatically via Vercel's GitHub integration.
-
-### Local preview
-
-```sh
-npx http-server docs -p 8080 -c-1   # any static server works
-# open http://localhost:8080
-```
-
-Or use Vercel's local dev:
-
-```sh
-npx vercel dev
-```
-
-### Add a new doc page
+### Add a new page
 
 1. Create `docs/your-page.md`.
-2. Add it to `docs/_sidebar.md`.
-3. Commit + push — Vercel redeploys.
+2. Add to `docs/_sidebar.md`.
+3. Commit + push.
 
-Mermaid code blocks (` ```mermaid `) render client-side via the plugin loaded in `docs/index.html`. Search is auto-indexed by the `docsify-search` plugin (same file).
+Mermaid code blocks (` ```mermaid `) render via the plugin in `docs/index.html`. Search auto-indexes via `docsify-search`.

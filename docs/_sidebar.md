@@ -1,5 +1,6 @@
 - **Overview**
   - [Home](index.md)
+  - [Changelog](changelog.md)
 
 - **Architecture**
   - [System architecture](architecture.md)
