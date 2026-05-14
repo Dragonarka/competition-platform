@@ -2,7 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
 import { LayoutDashboard, Trophy } from 'lucide-react';
-import { getTranslations } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { Link } from '@/i18n/navigation';
 import { LanguageSwitcher } from '@/components/i18n/language-switcher';
 import { OrganizerLocaleReconciler } from '@/components/i18n/organizer-locale-reconciler';
@@ -10,7 +10,16 @@ import { OrganizerLocaleReconciler } from '@/components/i18n/organizer-locale-re
 // All admin routes are Clerk-gated and cannot be prerendered.
 export const dynamic = 'force-dynamic';
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({
+  children,
+  params,
+}: {
+  children: React.ReactNode;
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
   const { userId } = await auth();
   if (!userId) {
     redirect('/sign-in');
