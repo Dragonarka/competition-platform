@@ -77,6 +77,51 @@ _bmad-output/
 
 Slash commands are case-sensitive; tab-complete in Claude Code.
 
+## Format design workflow (project-specific)
+
+Adding a new competition format goes through a dedicated conversational design flow before any code is written. An AI agent interviews the requester, challenges vague terms, surfaces tradeoffs they didn't see, audits for fairness gaps, and produces a structured `desire.md` plus (if needed) a `format-request.md` implementation ticket.
+
+```mermaid
+flowchart LR
+    Open["Open the desire<br/>plain-language description"] --> Probe
+    Probe["Critical interrogation<br/>ambiguity · contradictions · failure modes"] --> Match
+    Match{"Match predefined<br/>catalog?"}
+    Match -->|good fit| Config["Existing format<br/>+ config"]
+    Match -->|no fit| Negotiate["Tradeoff negotiation<br/>SDK surface, option by option"]
+    Negotiate --> Audit
+    Config --> Audit
+    Audit["Fairness audit<br/>collusion · ties · drop-outs · audit trail"] --> Write
+    Write["Write desire.md<br/>formats/desires/"] --> Approve
+    Approve{Approved?}
+    Approve -->|yes, existing| Done["Stop — config<br/>is the artifact"]
+    Approve -->|yes, new| Request["Write request.md<br/>formats/requests/"]
+    Approve -->|no| Probe
+    Request --> Story["Hand off via<br/>/bmad-bmm-create-story"]
+
+    style Open fill:#e8f5e9
+    style Probe fill:#fff3e0
+    style Match fill:#e3f2fd
+    style Negotiate fill:#fff3e0
+    style Audit fill:#fff3e0
+    style Write fill:#e3f2fd
+    style Done fill:#dcfce7
+    style Story fill:#f3e5f5
+```
+
+Invoke with `/desire-a-format`. The agent's persona is **curious, skeptical, fairness-first, candid** — explicitly _not_ a yes-machine. It won't accept "fair" as a final answer, won't let you have both sides of a tradeoff, and won't propose a new format until it has matched against the predefined catalog.
+
+| Step                                                 | What                                                 |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| `/desire-a-format` (Claude Code)                     | Triggers the slash command                           |
+| Loads `formats/skill/conversation-guide.md`          | The agent's full instruction set                     |
+| Reads `formats/predefined/*.md`                      | 5 catalog briefs (cypher-battles shipped, 4 planned) |
+| Writes `formats/desires/desire-YYYY-MM-DD-<slug>.md` | The agreed model + conversation record               |
+| Optionally writes `formats/requests/request-*.md`    | Implementation ticket for new formats                |
+
+Outputs are committed alongside the rest of the planning work. Full reference: [`formats/README.md`](https://github.com/Dragonarka/competition-platform/blob/main/formats/README.md).
+
+**Initial state vs eventual:** today this is an internal-only design tool. The conversation patterns, predefined catalog, and templates that prove themselves here become the basis for an organizer-facing format wizard in the web app later.
+
 ## Story lifecycle
 
 ```mermaid

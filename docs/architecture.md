@@ -230,9 +230,11 @@ flowchart LR
 
 Adding a new format = new package under `packages/formats/`. The web app discovers it via the registry; the API consumes its scoring rules through the SDK. No edits to core web/api required.
 
+**How new formats actually get designed:** the `/desire-a-format` skill drives a critical, agent-led conversation that produces a structured `desire.md` (and an implementation ticket if a new format is warranted) before any code is written. The conversation forces operational definitions of vague terms, tradeoff negotiations, and a fairness audit. See [Workflows → Format design](./workflows.md#format-design-workflow-project-specific) for the full flow.
+
 ---
 
-## 7. Deployment topology (target state)
+## 7. Deployment topology (current — live since 2026-05-13)
 
 ```mermaid
 flowchart TB
@@ -240,8 +242,8 @@ flowchart TB
         D["dragonarka.com"]
     end
 
-    subgraph Vercel["Vercel (or Fly)"]
-        Wapp["Next.js<br/>(SSR + edge)"]
+    subgraph Vercel["Vercel"]
+        Wapp["Next.js 16<br/>(SSR + edge)"]
     end
 
     subgraph FlyBog["Fly.io · Bogotá (bog)"]
@@ -266,4 +268,4 @@ flowchart TB
     style Managed stroke:#0891b2,stroke-width:2px
 ```
 
-Current state: API config exists but isn't deployed; web has no deploy config; Neon/Upstash aren't provisioned. See [Deploy](./deploy.md) for the unblock checklist.
+The first full production deploy landed on 2026-05-13 (web on Vercel, API on Fly.io in `bog`, Postgres on Neon, Redis on Upstash, auth via Clerk). See [Changelog](./changelog.md) and the [Deploy runbook](./deploy.md) for operational details.
