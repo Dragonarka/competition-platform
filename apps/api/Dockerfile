@@ -1,29 +1,25 @@
-# Stage 1: Build
+# Stage 1: Build everything
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Install pnpm
 RUN npm install -g pnpm@9
 
-# Copy workspace files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+# Copy workspace manifests first (Docker layer cache friendly)
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* turbo.json ./
 COPY apps/api/package.json ./apps/api/
 COPY packages/ ./packages/
 
-# Install dependencies
+# Install all deps including dev (needed for tsc/nest build)
 RUN pnpm install --frozen-lockfile
 
-# Copy source
+# Copy api source
 COPY apps/api/ ./apps/api/
 
-# Type-check only — `nest build` validates the codebase but the runtime
-# executes TS source via tsx because workspace packages
-# (packages/db, packages/shared, etc.) expose ./index.ts directly with
-# no build step. Until each package emits compiled JS, tsx is the
-# pragmatic runtime.
-RUN pnpm --filter @competition-platform/api typecheck
+# Build packages topologically (^build), then the api itself.
+# turbo respects the dependsOn graph in turbo.json.
+RUN pnpm turbo run build --filter=@competition-platform/api
 
-# Stage 2: Production
+# Stage 2: Production runtime
 FROM node:20-alpine AS runner
 WORKDIR /app
 
@@ -31,16 +27,26 @@ RUN npm install -g pnpm@9
 
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY apps/api/package.json ./apps/api/
-COPY packages/ ./packages/
 
+# Copy each package's manifest + compiled dist (NOT raw source) so pnpm
+# resolves workspace deps to the built artifacts.
+COPY --from=builder /app/packages/shared/package.json /app/packages/shared/dist ./packages/shared/
+COPY --from=builder /app/packages/db/package.json ./packages/db/
+COPY --from=builder /app/packages/db/dist ./packages/db/dist
+COPY --from=builder /app/packages/db/migrations ./packages/db/migrations
+COPY --from=builder /app/packages/db/drizzle.config.ts ./packages/db/
+COPY --from=builder /app/packages/format-sdk/package.json /app/packages/format-sdk/dist ./packages/format-sdk/
+COPY --from=builder /app/packages/formats/cypher-battles/package.json ./packages/formats/cypher-battles/
+COPY --from=builder /app/packages/formats/cypher-battles/dist ./packages/formats/cypher-battles/dist
+COPY --from=builder /app/packages/config-eslint ./packages/config-eslint/
+COPY --from=builder /app/packages/config-typescript ./packages/config-typescript/
+
+# Install prod deps for everything in scope
 RUN pnpm install --frozen-lockfile --prod
 
-# Copy the TypeScript source — tsx runs it directly.
-COPY --from=builder /app/apps/api/src ./apps/api/src
-COPY --from=builder /app/apps/api/tsconfig.json ./apps/api/tsconfig.json
+# Compiled api output
+COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
 WORKDIR /app/apps/api
 EXPOSE 3001
-# TODO: switch to `node dist/src/main.js` once each workspace package
-# has its own build step emitting JS.
-CMD ["node_modules/.bin/tsx", "src/main.ts"]
+CMD ["node", "dist/src/main.js"]

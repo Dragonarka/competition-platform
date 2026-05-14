@@ -2,24 +2,39 @@
   "name": "@competition-platform/format-cypher-battles",
   "version": "0.0.1",
   "license": "MIT",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./validators": "./src/validators/score-validator.ts",
-    "./scoring": "./src/scoring/aggregation.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./validators": {
+      "types": "./dist/validators/score-validator.d.ts",
+      "default": "./dist/validators/score-validator.js"
+    },
+    "./scoring": {
+      "types": "./dist/scoring/aggregation.d.ts",
+      "default": "./dist/scoring/aggregation.js"
+    }
   },
   "typesVersions": {
     "*": {
       "validators": [
-        "./src/validators/score-validator.ts"
+        "./dist/validators/score-validator.d.ts"
       ],
       "scoring": [
-        "./src/scoring/aggregation.ts"
+        "./dist/scoring/aggregation.d.ts"
       ]
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
     "test": "vitest run",
     "lint": "eslint src"
   },
