@@ -1,7 +1,17 @@
+import { Plus } from 'lucide-react';
 import { Suspense } from 'react';
 import { getTranslations } from 'next-intl/server';
 import { CompetitionList } from '@/components/admin/competition-list';
 import { CompetitionListSkeleton } from '@/components/admin/competition-list-skeleton';
+import { buttonVariants } from '@/components/ui/button';
+import {
+  PageHeader,
+  PageHeaderActions,
+  PageHeaderEyebrow,
+  PageHeaderText,
+  PageHeaderTitle,
+} from '@/components/ui/page-header';
+import { Link } from '@/i18n/navigation';
 
 export default async function DashboardPage() {
   const t = await getTranslations('Dashboard');
@@ -9,16 +19,18 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
-        {/* Create competition button — implemented in Story 2.1 */}
-        <button
-          disabled
-          className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium opacity-40 cursor-not-allowed"
-        >
-          {tCompetitions('newCompetition')}
-        </button>
-      </div>
+      <PageHeader>
+        <PageHeaderText>
+          <PageHeaderEyebrow>{tCompetitions('pageTitle')}</PageHeaderEyebrow>
+          <PageHeaderTitle>{t('title')}</PageHeaderTitle>
+        </PageHeaderText>
+        <PageHeaderActions>
+          <Link href="/competitions/new" className={buttonVariants({ size: 'sm' })}>
+            <Plus />
+            {tCompetitions('newCompetition')}
+          </Link>
+        </PageHeaderActions>
+      </PageHeader>
       <Suspense fallback={<CompetitionListSkeleton />}>
         <CompetitionList />
       </Suspense>

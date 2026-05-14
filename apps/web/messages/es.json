@@ -15,7 +15,9 @@
     "close": "Cerrar",
     "copy": "Copiar",
     "yes": "Sí",
-    "no": "No"
+    "no": "No",
+    "copied": "¡Copiado!",
+    "share": "Compartir"
   },
   "App": {
     "title": "Plataforma de Competencia",
@@ -642,7 +644,34 @@
   },
   "Auth": {
     "signInTitle": "Inicia sesión en Plataforma de Competencia",
-    "signUpTitle": "Crea tu cuenta"
+    "signUpTitle": "Crea tu cuenta",
+    "brandTagline": "Competencias en vivo, gestionadas de extremo a extremo.",
+    "brandSubtitle": "Configura jueces, califica con transparencia y transmite el bracket — todo desde un solo lugar."
+  },
+  "Landing": {
+    "brand": "Plataforma de Competencia",
+    "signIn": "Iniciar sesión",
+    "getStarted": "Empezar",
+    "eyebrow": "En producción",
+    "headline": "Competencias en vivo, con justicia en tiempo real.",
+    "subhead": "Del Cypher al bracket de Batallas — califica desde cualquier sitio, presenta en vivo y audita cada decisión.",
+    "ctaPrimary": "Crea tu primera competencia",
+    "ctaSecondary": "Iniciar sesión",
+    "features": {
+      "cypher": {
+        "title": "Cypher → Batallas",
+        "description": "Calificación round-robin y luego un bracket. Desempates y trazabilidad incluidos."
+      },
+      "judges": {
+        "title": "Jueces a distancia",
+        "description": "Enlaces con token, envío sin conexión y asignación por grupos sin hojas de cálculo."
+      },
+      "realtime": {
+        "title": "Standings en vivo",
+        "description": "Standings y bracket por WebSocket que el público puede ver en tiempo real."
+      }
+    },
+    "footer": "Hecho para eventos en vivo. Tipado de extremo a extremo."
   },
   "LanguageSwitcher": {
     "label": "Cambiar idioma",

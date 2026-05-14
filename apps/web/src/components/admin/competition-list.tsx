@@ -1,9 +1,17 @@
 'use client';
 
+import { Trophy } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { trpc } from '@/lib/trpc';
 import { Link } from '@/i18n/navigation';
 import { buttonVariants } from '@/components/ui/button';
+import {
+  EmptyState,
+  EmptyStateAction,
+  EmptyStateDescription,
+  EmptyStateIcon,
+  EmptyStateTitle,
+} from '@/components/ui/empty-state';
 import { CompetitionCard } from './competition-card';
 
 export function CompetitionList() {
@@ -12,13 +20,18 @@ export function CompetitionList() {
 
   if (!competitions || competitions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-muted-foreground text-lg mb-2">{t('emptyTitle')}</p>
-        <p className="text-muted-foreground text-sm mb-6">{t('emptyHint')}</p>
-        <Link href="/competitions/new" className={buttonVariants()}>
-          {t('emptyCta')}
-        </Link>
-      </div>
+      <EmptyState>
+        <EmptyStateIcon>
+          <Trophy />
+        </EmptyStateIcon>
+        <EmptyStateTitle>{t('emptyTitle')}</EmptyStateTitle>
+        <EmptyStateDescription>{t('emptyHint')}</EmptyStateDescription>
+        <EmptyStateAction>
+          <Link href="/competitions/new" className={buttonVariants()}>
+            {t('emptyCta')}
+          </Link>
+        </EmptyStateAction>
+      </EmptyState>
     );
   }
 

@@ -1,11 +1,10 @@
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
-import { LayoutDashboard, Trophy } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { Link } from '@/i18n/navigation';
 import { LanguageSwitcher } from '@/components/i18n/language-switcher';
 import { OrganizerLocaleReconciler } from '@/components/i18n/organizer-locale-reconciler';
+import { AdminSidebar, AdminSidebarMobile } from '@/components/admin/admin-sidebar';
 
 // All admin routes are Clerk-gated and cannot be prerendered.
 export const dynamic = 'force-dynamic';
@@ -29,36 +28,19 @@ export default async function AdminLayout({
   const tApp = await getTranslations('App');
 
   const navItems = [
-    { href: '/dashboard', icon: LayoutDashboard, label: t('dashboard') },
-    { href: '/competitions', icon: Trophy, label: t('competitions') },
+    { href: '/dashboard', icon: 'dashboard' as const, label: t('dashboard') },
+    { href: '/competitions', icon: 'trophy' as const, label: t('competitions') },
   ];
 
   return (
-    <div className="min-h-screen flex">
+    <div className="flex min-h-screen">
       <OrganizerLocaleReconciler />
-      {/* Icon sidebar — 56px fixed width */}
-      <aside className="w-14 flex flex-col items-center py-4 gap-1 border-r border-border bg-card shrink-0">
-        {navItems.map(({ href, icon: Icon, label }) => (
-          <Link
-            key={href}
-            href={href}
-            title={label}
-            aria-label={label}
-            className="w-10 h-10 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/10 transition-colors"
-          >
-            <Icon size={20} />
-          </Link>
-        ))}
-      </aside>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <span className="font-semibold text-foreground">{tApp('title')}</span>
-          <div className="flex items-center gap-3">
-            <LanguageSwitcher />
-            <UserButton />
-          </div>
+      <AdminSidebar items={navItems} brand={tApp('title')} />
+      <AdminSidebarMobile items={navItems} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 items-center justify-end gap-3 border-b border-border bg-background/80 px-6 backdrop-blur">
+          <LanguageSwitcher />
+          <UserButton appearance={{ elements: { avatarBox: 'h-8 w-8' } }} />
         </header>
         <main className="flex-1 p-6">{children}</main>
       </div>

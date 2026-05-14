@@ -1,9 +1,35 @@
-# Vercel deploys the /docs site only. Exclude everything else to stay
-# under the 100 MB upload limit and avoid leaking source.
-*
+# Exclusions applied to ALL Vercel deploys from this repo (docs + web).
+# Vercel still respects per-project rootDirectory after this filter runs.
 
-# Re-include the docs site and its config.
-!docs
-!docs/**
-!vercel.json
-!.vercelignore
+# Dependencies and build artifacts — Vercel rebuilds these
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+.turbo/
+**/.turbo/
+dist/
+**/dist/
+
+# Local dev artifacts
+.auth/
+**/.auth/
+tests/test-results/
+tests/playwright-report/
+*.local
+
+# BMAD planning (large, private workflow state)
+_bmad/
+_bmad-output/
+
+# Git internals (Vercel uses git separately)
+.git/
+
+# Editor/OS noise
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+.npm/

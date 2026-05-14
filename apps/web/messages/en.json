@@ -15,7 +15,9 @@
     "close": "Close",
     "copy": "Copy",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "copied": "Copied!",
+    "share": "Share"
   },
   "App": {
     "title": "Competition Platform",
@@ -642,7 +644,34 @@
   },
   "Auth": {
     "signInTitle": "Sign in to Competition Platform",
-    "signUpTitle": "Create your account"
+    "signUpTitle": "Create your account",
+    "brandTagline": "Real-time competitions, run end-to-end.",
+    "brandSubtitle": "Configure judges, score in the open, and broadcast the bracket — all from one cockpit."
+  },
+  "Landing": {
+    "brand": "Competition Platform",
+    "signIn": "Sign in",
+    "getStarted": "Get started",
+    "eyebrow": "Live in production",
+    "headline": "Run competitions with real-time fairness.",
+    "subhead": "From Cypher scoring to Battles brackets — judge anywhere, present anywhere, audit everything.",
+    "ctaPrimary": "Create your first competition",
+    "ctaSecondary": "Sign in",
+    "features": {
+      "cypher": {
+        "title": "Cypher → Battles",
+        "description": "Round-robin scoring, then a bracket. Tie-resolution and audit trails built in."
+      },
+      "judges": {
+        "title": "Judges anywhere",
+        "description": "Token links, offline-safe submission, and per-group assignment without spreadsheets."
+      },
+      "realtime": {
+        "title": "Live standings",
+        "description": "WebSocket-backed standings and bracket views the audience can watch in real time."
+      }
+    },
+    "footer": "Built for live events. Type-safe end-to-end."
   },
   "LanguageSwitcher": {
     "label": "Change language",
