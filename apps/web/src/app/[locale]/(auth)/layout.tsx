@@ -12,8 +12,10 @@ export default async function AuthLayout({
 }) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const tAuth = await getTranslations('Auth');
-  const tApp = await getTranslations('App');
+  const t = await getTranslations();
+  const appTitle = t('App.title');
+  const brandTagline = t('Auth.brandTagline');
+  const brandSubtitle = t('Auth.brandSubtitle');
 
   return (
     <div className="relative grid min-h-screen grid-cols-1 lg:grid-cols-2">
@@ -29,14 +31,14 @@ export default async function AuthLayout({
           <span className="flex size-7 items-center justify-center rounded-md bg-primary-foreground/15 backdrop-blur-sm">
             <Logo size={16} />
           </span>
-          {tApp('title')}
+          {appTitle}
         </Link>
 
         <div className="relative z-10 flex flex-col gap-3">
           <p className="font-heading text-3xl leading-tight font-semibold tracking-tight">
-            {tAuth('brandTagline')}
+            {brandTagline}
           </p>
-          <p className="max-w-md text-sm text-primary-foreground/80">{tAuth('brandSubtitle')}</p>
+          <p className="max-w-md text-sm text-primary-foreground/80">{brandSubtitle}</p>
         </div>
       </aside>
 
