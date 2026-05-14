@@ -23,6 +23,20 @@
     "title": "Competition Platform",
     "description": "Real-time WebSocket competition platform"
   },
+  "NotFound": {
+    "eyebrow": "404",
+    "title": "We couldn't find that page",
+    "description": "The link may be broken, the competition may have ended, or the URL was mistyped.",
+    "goHome": "Back to home",
+    "goDashboard": "Back to dashboard"
+  },
+  "ErrorBoundary": {
+    "eyebrow": "Something went wrong",
+    "title": "An unexpected error occurred",
+    "description": "Refresh the page to try again. If the problem persists, contact the organizer.",
+    "retry": "Try again",
+    "goHome": "Back to home"
+  },
   "AdminNav": {
     "dashboard": "Dashboard",
     "competitions": "Competitions"

@@ -23,6 +23,20 @@
     "title": "Plataforma de Competencia",
     "description": "Plataforma de competencias en tiempo real con WebSocket"
   },
+  "NotFound": {
+    "eyebrow": "404",
+    "title": "No encontramos esa página",
+    "description": "El enlace puede estar roto, la competencia pudo haber terminado o la URL está mal escrita.",
+    "goHome": "Volver al inicio",
+    "goDashboard": "Volver al panel"
+  },
+  "ErrorBoundary": {
+    "eyebrow": "Algo salió mal",
+    "title": "Ocurrió un error inesperado",
+    "description": "Recarga la página para intentarlo de nuevo. Si el problema persiste, contacta al organizador.",
+    "retry": "Reintentar",
+    "goHome": "Volver al inicio"
+  },
   "AdminNav": {
     "dashboard": "Panel",
     "competitions": "Competencias"
