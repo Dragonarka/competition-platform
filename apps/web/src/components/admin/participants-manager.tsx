@@ -100,12 +100,26 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
       ? (participantsQuery.data ?? []).filter((p) => p.partnerId === null).length
       : 0;
 
+  // Auto-generate an unused id for a competitor when the field is left blank.
+  // Pattern: `<prefix>-NNN` where NNN is the lowest 3-digit number that does
+  // not collide with an existing participantId. Helps the common case where
+  // organizers don't care about IDs and just want sequential labels.
+  function nextAutoId(prefix: string): string {
+    for (let i = 1; i <= 999; i += 1) {
+      const candidate = `${prefix}-${String(i).padStart(3, '0')}`;
+      if (!existingIds.has(candidate)) return candidate;
+    }
+    // Fallback if every slot 001-999 is taken
+    return `${prefix}-${Date.now().toString().slice(-6)}`;
+  }
+
   function handleAddIndividual(e: React.FormEvent) {
     e.preventDefault();
     setConflictError(null);
+    const trimmedId = participantId.trim();
     addMutation.mutate({
       competitionId,
-      participantId: participantId.trim(),
+      participantId: trimmedId || nextAutoId('P'),
       name: name.trim(),
     });
   }
@@ -113,10 +127,18 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
   function handleAddPair(e: React.FormEvent) {
     e.preventDefault();
     setConflictError(null);
+    const trimmedLeader = leaderId.trim();
+    const trimmedFollower = followerId.trim();
     addPairMutation.mutate({
       competitionId,
-      leader: { participantId: leaderId.trim(), name: leaderName.trim() },
-      follower: { participantId: followerId.trim(), name: followerName.trim() },
+      leader: {
+        participantId: trimmedLeader || nextAutoId('L'),
+        name: leaderName.trim(),
+      },
+      follower: {
+        participantId: trimmedFollower || nextAutoId('F'),
+        name: followerName.trim(),
+      },
     });
   }
 
