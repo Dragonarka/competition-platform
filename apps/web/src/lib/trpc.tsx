@@ -10,7 +10,10 @@ import type { AppRouter } from '@competition-platform/api/trpc';
 export const trpc = createTRPCReact<AppRouter>();
 
 function getBaseUrl(): string {
-  if (typeof window !== 'undefined') return '';
+  // Always use the absolute API origin so the browser bypasses the Next.js
+  // rewrite layer entirely. Avoids the failure mode where the rewrite
+  // destination is empty at build time and silently routes /trpc/* to the
+  // web origin (which 404s). The API has CORS configured for the web origin.
   return process.env['NEXT_PUBLIC_API_URL'] ?? 'http://localhost:3001';
 }
 
