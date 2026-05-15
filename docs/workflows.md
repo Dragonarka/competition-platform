@@ -61,21 +61,85 @@ _bmad-output/
 
 ## Most-used skills
 
-| Skill                            | When to use                                    |
-| -------------------------------- | ---------------------------------------------- |
-| `/bmad-help`                     | See the full catalog and your current progress |
-| `/bmad-bmm-create-story`         | Scope a new story (AC, tech notes, tasks)      |
-| `/bmad-bmm-dev-story`            | Execute a story end-to-end                     |
-| `/bmad-bmm-quick-dev`            | Small enhancement that doesn't need a story    |
-| `/bmad-bmm-code-review`          | Adversarial review before commit               |
-| `/bmad-tea-testarch-framework`   | Scaffold or extend Playwright infra            |
-| `/bmad-tea-testarch-ci`          | Generate or repair GitHub Actions              |
-| `/bmad-tea-testarch-trace`       | Build a story↔test traceability matrix         |
-| `/bmad-tea-testarch-test-design` | Plan tests before implementing                 |
-| `/bmad-tea-testarch-atdd`        | Acceptance-test-driven development             |
-| `/bmad-bmm-epic-retro`           | Run a multi-agent retrospective on an epic     |
+> 📌 **As of 2026-05-15 (BMAD 6.6.0)** the slash commands no longer carry the `-bmm-` middle segment. Use `/bmad-create-story`, not `/bmad-bmm-create-story`.
+
+| Skill                        | When to use                                                     |
+| ---------------------------- | --------------------------------------------------------------- |
+| `/bmad-help`                 | See the full catalog and your current progress                  |
+| `/bmad-sprint-status`        | Surface current sprint state + risks (read-only)                |
+| `/bmad-sprint-planning`      | Generate `sprint-status.yaml` from epics                        |
+| `/bmad-create-story`         | Scope a new story (AC, tech notes, tasks)                       |
+| `/bmad-dev-story`            | Execute a story end-to-end (autonomous by design)               |
+| `/bmad-quick-dev`            | Small enhancement that doesn't need a story                     |
+| `/bmad-code-review`          | Adversarial review (3 parallel layers)                          |
+| `/bmad-checkpoint-preview`   | LLM-assisted human-in-the-loop review                           |
+| `/bmad-correct-course`       | Course-correction when stories or scope drift                   |
+| `/bmad-testarch-framework`   | Scaffold or extend Playwright infra                             |
+| `/bmad-testarch-ci`          | Generate or repair GitHub Actions                               |
+| `/bmad-testarch-trace`       | Build a story↔test traceability matrix (JSON output as of 1.17) |
+| `/bmad-testarch-test-design` | Plan tests before implementing                                  |
+| `/bmad-testarch-atdd`        | Acceptance-test-driven development                              |
+| `/bmad-retrospective`        | Run a multi-agent retrospective on an epic                      |
+| `/bmad-implementer`          | **NEW** — auto-mode orchestrator for the full chain (see below) |
 
 Slash commands are case-sensitive; tab-complete in Claude Code.
+
+## Auto-mode chain orchestrator (`/bmad-implementer`)
+
+A project-local skill that drives the BMAD chain in full-auto. Pass `--story <id>`, `--epic <id>`, or `--all`. Every sub-workflow (`bmad-create-story`, `bmad-dev-story`, `bmad-code-review`) runs in a **fresh subagent** so the orchestrator's context stays slim and BMAD's "fresh context per step" doctrine is honored.
+
+```mermaid
+flowchart TB
+    Inv["/bmad-implementer --epic epic-7"] --> Read[Read sprint-status.yaml]
+    Read --> Loop{For each non-done story}
+    Loop --> State{Current status?}
+
+    State -->|backlog| Sub1["Delegate to subagent:<br/>bmad-create-story"]
+    State -->|ready-for-dev| Sub2["Delegate to subagent:<br/>bmad-dev-story"]
+    State -->|review| Sub3["Delegate to subagent:<br/>bmad-code-review"]
+
+    Sub1 -->|status: ready-for-dev| Verify[Re-read status]
+    Sub2 -->|status: review| Verify
+    Sub2 -->|HALT| Halt[Write session log<br/>PushNotification<br/>STOP]
+    Sub3 -->|status: done| Commit["Git commit + push<br/>(per-story default)"]
+    Sub3 -->|rework needed| Sub2
+
+    Verify --> Loop
+    Commit --> Loop
+    Loop -->|all done| Report[Session summary]
+
+    style Halt fill:#fee2e2
+    style Report fill:#dcfce7
+    style Sub1 fill:#e3f2fd
+    style Sub2 fill:#e3f2fd
+    style Sub3 fill:#e3f2fd
+```
+
+### Invocation examples
+
+| Command                                                             | What runs                                |
+| ------------------------------------------------------------------- | ---------------------------------------- |
+| `/bmad-implementer --story 3-3-judge-scoring-interface-cypher-mode` | One story, current state → done          |
+| `/bmad-implementer --epic epic-7`                                   | Every non-done story in epic-7, in order |
+| `/bmad-implementer --all`                                           | Drain everything not done, epic by epic  |
+
+### Pause conditions (auto-mode CAN'T skip these)
+
+- BMAD's existing dev-story HALTs: new deps, ambiguous AC, 3 consecutive subtask failures, CI failures
+- More than `--max-rework-rounds` (default 2) of code-review finding new blockers
+- State corruption (subagent claims a status that disagrees with `sprint-status.yaml`)
+- Dirty working tree at session start, or not on `main`
+
+On any pause: writes `.claude/workflows/bmad-implementer/sessions/session-<date>.md`, fires `PushNotification`, ends the turn cleanly. User resolves and re-invokes.
+
+### What it never does
+
+- Touches `_bmad/` content (vendor territory; gets overwritten on upgrade)
+- Reads project source code in its own context (the dev-story subagent's job)
+- Production deploys (explicit human gate)
+- Cross-epic refactors not in any story scope
+
+Full reference: [`.claude/workflows/bmad-implementer/orchestrator-guide.md`](https://github.com/Dragonarka/competition-platform/blob/main/.claude/workflows/bmad-implementer/orchestrator-guide.md) and the [state machine](https://github.com/Dragonarka/competition-platform/blob/main/.claude/workflows/bmad-implementer/state-machine.md).
 
 ## Format design workflow (project-specific)
 

@@ -122,18 +122,21 @@ brief → PRD → epic → story → dev → test → review → retro
 
 Each phase has a skill. Outputs land in `_bmad-output/` and are committed.
 
-Most-used skills:
+Most-used skills (BMAD 6.6.0 — no `-bmm-`/`-tea-` middle segment anymore):
 
-- `/bmad-bmm-create-story` — generate a story file with AC and tech notes
-- `/bmad-bmm-dev-story` — execute a story (read AC, code, test, commit)
-- `/bmad-bmm-quick-dev` — small enhancements without a full story
-- `/bmad-tea-testarch-framework` — scaffold/extend Playwright infra
-- `/bmad-tea-testarch-ci` — generate/repair GitHub Actions
-- `/bmad-tea-testarch-trace` — traceability matrix story→test
-- `/bmad-checkpoint-preview` (post-upgrade) — guided pre-commit human review
+- `/bmad-help` — surfaces what to run next based on current state
+- `/bmad-sprint-status` — read-only summary of every epic + story
+- `/bmad-create-story` — generate a story file with AC and tech notes
+- `/bmad-dev-story` — execute a story (autonomous by design)
+- `/bmad-quick-dev` — small enhancements without a full story
+- `/bmad-code-review` — 3-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor)
+- `/bmad-checkpoint-preview` — LLM-assisted human-in-the-loop change review
+- `/bmad-testarch-framework` / `/bmad-testarch-ci` / `/bmad-testarch-trace` — test architecture
+- `/bmad-retrospective` — post-epic review
 
-### Format design (project-specific)
+### Project-local meta-skills
 
+- `/bmad-implementer` — **auto-mode chain orchestrator**. Drives `create-story → dev-story → code-review` for a scope (`--story`, `--epic`, or `--all`) in full-auto, delegating each sub-workflow to a fresh subagent. Pauses only on HALT conditions (new deps, ambiguous AC, dev failures, CI failures, max rework). Writes session logs to `.claude/workflows/bmad-implementer/sessions/`. Reference: [`.claude/workflows/bmad-implementer/orchestrator-guide.md`](./.claude/workflows/bmad-implementer/orchestrator-guide.md).
 - `/desire-a-format` — critical, agent-led conversation to design a new competition format. Matches against the [predefined catalog](./formats/predefined/) or drafts a structured implementation request. Outputs `formats/desires/desire-*.md` (and `formats/requests/request-*.md` if a new format is needed). Workflow doc: [`formats/README.md`](./formats/README.md).
 
 Diagram: [`docs/workflows.md`](./docs/workflows.md).
