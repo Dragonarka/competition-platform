@@ -23,6 +23,9 @@ import {
   addCriterionSchema,
   copyCriteriaTemplateSchema,
   addParticipantSchema,
+  addPairSchema,
+  bulkAddParticipantsSchema,
+  bulkAddPairsSchema,
   setParticipantFormatSchema,
   setJudgeConfigSchema,
   generateJudgeLinksSchema,
@@ -1207,6 +1210,241 @@ export function createTournamentRouter(
         });
       }),
 
+    addPair: protectedProcedure
+      .input(addPairSchema)
+      .mutation(async ({ ctx, input }) => {
+        return db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+          const [comp] = await tx
+            .select({
+              id: competitions.id,
+              participantFormat: competitions.participantFormat,
+            })
+            .from(competitions)
+            .where(eq(competitions.id, input.competitionId));
+          if (!comp) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Competition not found',
+            });
+          }
+          if (comp.participantFormat !== 'pairs') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'addPair is only valid when participantFormat is "pairs"',
+            });
+          }
+          if (input.leader.participantId === input.follower.participantId) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Leader and follower must have different IDs',
+            });
+          }
+          const conflicts = await tx
+            .select({ participantId: competitors.participantId })
+            .from(competitors)
+            .where(
+              and(
+                eq(competitors.competitionId, input.competitionId),
+                inArray(competitors.participantId, [
+                  input.leader.participantId,
+                  input.follower.participantId,
+                ]),
+              ),
+            );
+          if (conflicts.length > 0) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: `Participant ID already exists: ${conflicts.map((c) => c.participantId).join(', ')}`,
+            });
+          }
+          try {
+            const [leaderRow] = await tx
+              .insert(competitors)
+              .values({
+                competitionId: input.competitionId,
+                participantId: input.leader.participantId,
+                name: input.leader.name,
+                role: 'leader',
+              })
+              .returning();
+            const [followerRow] = await tx
+              .insert(competitors)
+              .values({
+                competitionId: input.competitionId,
+                participantId: input.follower.participantId,
+                name: input.follower.name,
+                role: 'follower',
+                partnerId: leaderRow.id,
+              })
+              .returning();
+            const [updatedLeader] = await tx
+              .update(competitors)
+              .set({ partnerId: followerRow.id })
+              .where(eq(competitors.id, leaderRow.id))
+              .returning();
+            return { leader: updatedLeader, follower: followerRow };
+          } catch (err: unknown) {
+            if ((err as { code?: string }).code === '23505') {
+              throw new TRPCError({
+                code: 'CONFLICT',
+                message: 'A participant with this ID already exists',
+              });
+            }
+            throw err;
+          }
+        });
+      }),
+
+    bulkAddParticipants: protectedProcedure
+      .input(bulkAddParticipantsSchema)
+      .mutation(async ({ ctx, input }) => {
+        return db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+          const [comp] = await tx
+            .select({
+              id: competitions.id,
+              participantFormat: competitions.participantFormat,
+            })
+            .from(competitions)
+            .where(eq(competitions.id, input.competitionId));
+          if (!comp) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Competition not found',
+            });
+          }
+          if (comp.participantFormat !== 'individual') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'bulkAddParticipants is only valid for individual format — use bulkAddPairs for pairs',
+            });
+          }
+          const ids = input.rows.map((r) => r.participantId);
+          if (new Set(ids).size !== ids.length) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Duplicate participantId within the batch',
+            });
+          }
+          const conflicts = await tx
+            .select({ participantId: competitors.participantId })
+            .from(competitors)
+            .where(
+              and(
+                eq(competitors.competitionId, input.competitionId),
+                inArray(competitors.participantId, ids),
+              ),
+            );
+          if (conflicts.length > 0) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: `Participant ID already exists: ${conflicts.map((c) => c.participantId).join(', ')}`,
+            });
+          }
+          const inserted = await tx
+            .insert(competitors)
+            .values(
+              input.rows.map((r) => ({
+                competitionId: input.competitionId,
+                participantId: r.participantId,
+                name: r.name,
+              })),
+            )
+            .returning();
+          return { inserted: inserted.length };
+        });
+      }),
+
+    bulkAddPairs: protectedProcedure
+      .input(bulkAddPairsSchema)
+      .mutation(async ({ ctx, input }) => {
+        return db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+          const [comp] = await tx
+            .select({
+              id: competitions.id,
+              participantFormat: competitions.participantFormat,
+            })
+            .from(competitions)
+            .where(eq(competitions.id, input.competitionId));
+          if (!comp) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Competition not found',
+            });
+          }
+          if (comp.participantFormat !== 'pairs') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'bulkAddPairs is only valid for pairs format — use bulkAddParticipants for individual',
+            });
+          }
+          const ids = input.pairs.flatMap((p) => [
+            p.leader.participantId,
+            p.follower.participantId,
+          ]);
+          if (new Set(ids).size !== ids.length) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Duplicate participantId within the batch',
+            });
+          }
+          const conflicts = await tx
+            .select({ participantId: competitors.participantId })
+            .from(competitors)
+            .where(
+              and(
+                eq(competitors.competitionId, input.competitionId),
+                inArray(competitors.participantId, ids),
+              ),
+            );
+          if (conflicts.length > 0) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: `Participant ID already exists: ${conflicts.map((c) => c.participantId).join(', ')}`,
+            });
+          }
+          let createdPairs = 0;
+          for (const pair of input.pairs) {
+            const [leaderRow] = await tx
+              .insert(competitors)
+              .values({
+                competitionId: input.competitionId,
+                participantId: pair.leader.participantId,
+                name: pair.leader.name,
+                role: 'leader',
+              })
+              .returning();
+            const [followerRow] = await tx
+              .insert(competitors)
+              .values({
+                competitionId: input.competitionId,
+                participantId: pair.follower.participantId,
+                name: pair.follower.name,
+                role: 'follower',
+                partnerId: leaderRow.id,
+              })
+              .returning();
+            await tx
+              .update(competitors)
+              .set({ partnerId: followerRow.id })
+              .where(eq(competitors.id, leaderRow.id));
+            createdPairs += 1;
+          }
+          return { inserted: createdPairs };
+        });
+      }),
+
     removeParticipant: protectedProcedure
       .input(z.object({ competitorDbId: z.string().min(1) }))
       .mutation(async ({ ctx, input }) => {
@@ -1885,8 +2123,11 @@ export function createTournamentRouter(
           if (judgeAssignmentResults.length > 0) {
             const caseExpr = judgeAssignmentResults
               .map(
+                // Cast THEN value to integer: Drizzle binds JS numbers as text
+                // params by default; without ::int the CASE result is TEXT,
+                // which Postgres rejects against the integer `group_index` column.
                 (ja) =>
-                  sql`WHEN ${judgeSessions.id} = ${ja.id} THEN ${ja.groupIndex}`,
+                  sql`WHEN ${judgeSessions.id} = ${ja.id} THEN ${ja.groupIndex}::int`,
               )
               .reduce((acc, clause) => sql`${acc} ${clause}`);
             const judgeIds = judgeAssignmentResults.map((ja) => ja.id);
