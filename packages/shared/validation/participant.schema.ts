@@ -19,7 +19,9 @@ const participantPersonSchema = z.object({
 
 export const addParticipantSchema = z.object({
   competitionId: z.string().min(1),
-  participantId: participantIdField,
+  // Optional — when omitted or empty, the server auto-generates the next
+  // sequential ID (P-001, P-002, …) scoped to the competition.
+  participantId: participantIdField.optional(),
   name: participantNameField,
 });
 

@@ -300,7 +300,6 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
                         setConflictError(null);
                       }}
                       placeholder={t('leaderIdPlaceholder')}
-                      required
                     />
                   </div>
                   <div className="space-y-1">
@@ -328,7 +327,6 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
                         setConflictError(null);
                       }}
                       placeholder={t('followerIdPlaceholder')}
-                      required
                     />
                   </div>
                   <div className="space-y-1">
@@ -368,7 +366,6 @@ export function ParticipantsManager({ competitionId }: ParticipantsManagerProps)
                     setConflictError(null);
                   }}
                   placeholder={t('participantIdPlaceholder')}
-                  required
                   aria-describedby={conflictError ? 'pid-error' : undefined}
                   aria-invalid={!!conflictError}
                 />

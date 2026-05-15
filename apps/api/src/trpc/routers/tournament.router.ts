@@ -138,6 +138,28 @@ function emitMatchupBroadcasts(
   }
 }
 
+// Auto-generate the next sequential `P-NNN` participant ID by scanning existing
+// rows in the competition. Skips IDs the organizer typed manually (only matches
+// the P-NNN pattern). Padded to 3 digits so sort order matches insertion order
+// for the common case of ≤999 competitors.
+async function generateNextAutoId(
+  tx: Tx,
+  competitionId: string,
+): Promise<string> {
+  const rows = await tx
+    .select({ participantId: competitors.participantId })
+    .from(competitors)
+    .where(eq(competitors.competitionId, competitionId));
+  let maxNum = 0;
+  for (const row of rows) {
+    const match = /^P-(\d+)$/.exec(row.participantId);
+    if (!match) continue;
+    const n = Number.parseInt(match[1], 10);
+    if (Number.isFinite(n) && n > maxNum) maxNum = n;
+  }
+  return `P-${String(maxNum + 1).padStart(3, '0')}`;
+}
+
 async function nextEventSequence(
   tx: Tx,
   competitionId: string,
@@ -1171,28 +1193,37 @@ export function createTournamentRouter(
               message: 'Competition not found',
             });
           }
-          const [existing] = await tx
-            .select({ id: competitors.id })
-            .from(competitors)
-            .where(
-              and(
-                eq(competitors.competitionId, input.competitionId),
-                eq(competitors.participantId, input.participantId),
-              ),
-            );
-          if (existing) {
-            throw new TRPCError({
-              code: 'CONFLICT',
-              message:
-                'A participant with this ID already exists in this competition',
-            });
+          const explicitId = input.participantId?.trim();
+          // Auto-fill path: scan existing P-NNN IDs in this competition, pick
+          // max + 1, pad to 3 digits. Falls back to P-001 if none.
+          const participantId =
+            explicitId && explicitId.length > 0
+              ? explicitId
+              : await generateNextAutoId(tx, input.competitionId);
+          if (explicitId) {
+            const [existing] = await tx
+              .select({ id: competitors.id })
+              .from(competitors)
+              .where(
+                and(
+                  eq(competitors.competitionId, input.competitionId),
+                  eq(competitors.participantId, explicitId),
+                ),
+              );
+            if (existing) {
+              throw new TRPCError({
+                code: 'CONFLICT',
+                message:
+                  'A participant with this ID already exists in this competition',
+              });
+            }
           }
           try {
             const [created] = await tx
               .insert(competitors)
               .values({
                 competitionId: input.competitionId,
-                participantId: input.participantId,
+                participantId,
                 name: input.name,
               })
               .returning();
