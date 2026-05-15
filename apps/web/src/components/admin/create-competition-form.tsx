@@ -32,6 +32,9 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
   const [date, setDate] = useState('');
   const [description, setDescription] = useState('');
   const [mockParticipantCount, setMockParticipantCount] = useState('24');
+  const [formatKind, setFormatKind] = useState<'cypher_battles' | 'simple_bracket'>(
+    'cypher_battles',
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const createMutation = trpc.tournament.create.useMutation({
@@ -58,6 +61,7 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
       name: name.trim(),
       date: date ? `${date}T12:00:00.000Z` : null,
       description: description.trim() || null,
+      formatKind,
     };
 
     if (isSimulation) {
@@ -127,6 +131,31 @@ function CreateCompetitionFormCore({ isSimulation, sourceId, sourceName }: FormC
                 {errors.name}
               </p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>{t('formatLabel')}</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={formatKind === 'cypher_battles' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFormatKind('cypher_battles')}
+              >
+                {t('formatCypher')}
+              </Button>
+              <Button
+                type="button"
+                variant={formatKind === 'simple_bracket' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFormatKind('simple_bracket')}
+              >
+                {t('formatSimple')}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {formatKind === 'cypher_battles' ? t('formatCypherHint') : t('formatSimpleHint')}
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -72,7 +72,12 @@
       "creating": "Creating…",
       "cloneSourceHint": "Configuration will be cloned from {source}",
       "clonedNameDefault": "{source} (Simulation)",
-      "loadingSource": "Loading source competition…"
+      "loadingSource": "Loading source competition…",
+      "formatLabel": "Format",
+      "formatCypher": "Cypher → Battles",
+      "formatSimple": "Simple Bracket",
+      "formatCypherHint": "Group scoring, then a single-elimination bracket from the top scorers.",
+      "formatSimpleHint": "Skip scoring — every registered competitor goes straight into a single-elimination bracket."
     }
   },
   "Dashboard": {
@@ -247,6 +252,16 @@
     "createdOn": "Created {date}",
     "revoke": "Revoke",
     "copyFailed": "Failed to copy to clipboard"
+  },
+  "StartBracket": {
+    "title": "Start Bracket",
+    "hint": "Generates a single-elimination bracket from the registered competitors in registration order. Byes auto-advance.",
+    "startCta": "Start Bracket",
+    "starting": "Generating bracket…",
+    "loadingStatus": "Loading competition status…",
+    "activeTitle": "Bracket Started",
+    "activeBody": "The bracket is live. Judges can vote on matchups in the Battles tab.",
+    "bracketSummary": "{competitors} competitors · bracket size {size}"
   },
   "StartCypher": {
     "title": "Start Cypher Phase",

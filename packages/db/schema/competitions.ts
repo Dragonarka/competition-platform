@@ -12,6 +12,11 @@ export const participantFormatEnum = pgEnum('participant_format', ['individual',
 
 export const tieBreakingRuleEnum = pgEnum('tie_breaking_rule', ['re_vote', 'organizer_decision']);
 
+export const competitionFormatKindEnum = pgEnum('competition_format_kind', [
+  'cypher_battles',
+  'simple_bracket',
+]);
+
 export const competitions = pgTable('competitions', {
   id: text('id')
     .primaryKey()
@@ -30,6 +35,7 @@ export const competitions = pgTable('competitions', {
   cypherCompletedAt: timestamp('cypher_completed_at', { withTimezone: true }),
   soloMode: boolean('solo_mode').notNull().default(false),
   isSimulation: boolean('is_simulation').notNull().default(false),
+  formatKind: competitionFormatKindEnum('format_kind').notNull().default('cypher_battles'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

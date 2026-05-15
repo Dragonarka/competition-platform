@@ -31,6 +31,7 @@ import {
   generateJudgeLinksSchema,
   validateJudgeTokenSchema,
   startCypherPhaseSchema,
+  startSimpleBracketSchema,
   completeCypherPhaseSchema,
   submitScoreSchema,
   getDashboardSnapshotSchema,
@@ -823,6 +824,7 @@ export function createTournamentRouter(
               name: input.name,
               description: input.description ?? null,
               date: input.date ? new Date(input.date) : null,
+              ...(input.formatKind ? { formatKind: input.formatKind } : {}),
             })
             .returning({
               id: competitions.id,
@@ -830,6 +832,7 @@ export function createTournamentRouter(
               description: competitions.description,
               date: competitions.date,
               status: competitions.status,
+              formatKind: competitions.formatKind,
               createdAt: competitions.createdAt,
             });
           return created;
@@ -885,6 +888,7 @@ export function createTournamentRouter(
               description: input.description ?? null,
               date: input.date ? new Date(input.date) : null,
               isSimulation: true,
+              ...(input.formatKind ? { formatKind: input.formatKind } : {}),
               ...(sourceComp
                 ? {
                     participantFormat: sourceComp.participantFormat,
@@ -1138,6 +1142,7 @@ export function createTournamentRouter(
               cypherCompletedAt: competitions.cypherCompletedAt,
               soloMode: competitions.soloMode,
               isSimulation: competitions.isSimulation,
+              formatKind: competitions.formatKind,
             })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));
@@ -1509,13 +1514,28 @@ export function createTournamentRouter(
             sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
           );
           const [comp] = await tx
-            .select({ id: competitions.id })
+            .select({
+              id: competitions.id,
+              formatKind: competitions.formatKind,
+            })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));
           if (!comp) {
             throw new TRPCError({
               code: 'NOT_FOUND',
               message: 'Competition not found',
+            });
+          }
+          // simple_bracket format is individual-only for now — pair-aware
+          // brackets need separate matchup semantics (a follow-up decision).
+          if (
+            comp.formatKind === 'simple_bracket' &&
+            input.format === 'pairs'
+          ) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'simple_bracket format only supports individual participants',
             });
           }
           const [updated] = await tx
@@ -2013,6 +2033,7 @@ export function createTournamentRouter(
               soloMode: competitions.soloMode,
               isSimulation: competitions.isSimulation,
               participantFormat: competitions.participantFormat,
+              formatKind: competitions.formatKind,
             })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));
@@ -2020,6 +2041,16 @@ export function createTournamentRouter(
             throw new TRPCError({
               code: 'NOT_FOUND',
               message: 'Competition not found',
+            });
+          }
+
+          // 1a. Format guard — simple-bracket competitions skip the Cypher phase
+          // entirely and use startSimpleBracket instead.
+          if (comp.formatKind !== 'cypher_battles') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'startCypherPhase is only valid for cypher_battles format competitions',
             });
           }
 
@@ -2242,6 +2273,167 @@ export function createTournamentRouter(
             groupCount,
             competitorCount: allCompetitors.length,
             judgeCount: allJudgeSessions.length,
+          };
+        });
+      }),
+
+    startSimpleBracket: protectedProcedure
+      .input(startSimpleBracketSchema)
+      .mutation(async ({ ctx, input }) => {
+        return db.db.transaction(async (tx) => {
+          await tx.execute(
+            sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
+          );
+
+          const [comp] = await tx
+            .select({
+              id: competitions.id,
+              status: competitions.status,
+              participantFormat: competitions.participantFormat,
+              formatKind: competitions.formatKind,
+            })
+            .from(competitions)
+            .where(eq(competitions.id, input.competitionId));
+          if (!comp) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Competition not found',
+            });
+          }
+          if (comp.formatKind !== 'simple_bracket') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'startSimpleBracket is only valid for simple_bracket format competitions',
+            });
+          }
+          if (comp.status !== 'draft') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Competition has already been started',
+              cause: { errorCode: ErrorCodes.COMPETITION_ALREADY_STARTED },
+            });
+          }
+          if (comp.participantFormat !== 'individual') {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'simple_bracket format requires participantFormat = individual',
+            });
+          }
+
+          // Seed in registration order — first registered = seed 1.
+          const allCompetitors = await tx
+            .select({ id: competitors.id })
+            .from(competitors)
+            .where(eq(competitors.competitionId, input.competitionId))
+            .orderBy(asc(competitors.createdAt));
+          if (allCompetitors.length < 2) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message:
+                'At least 2 participants are required to start a bracket',
+              cause: { errorCode: ErrorCodes.NO_PARTICIPANTS_REGISTERED },
+            });
+          }
+
+          const transitionedAt = new Date();
+          const seeds: BracketSeed[] = allCompetitors.map((c, i) => ({
+            competitorId: c.id,
+            seed: i + 1,
+          }));
+          const bracket = generateBracket(seeds);
+
+          // Flip the competition to active. cypherCompletedAt is the platform's
+          // existing signal for "battles-mode UI" — setting it here lets the
+          // public bracket / presenter / battles voting flows light up without
+          // a new boolean per surface.
+          await tx
+            .update(competitions)
+            .set({
+              status: 'active',
+              cypherCompletedAt: transitionedAt,
+              updatedAt: transitionedAt,
+            })
+            .where(eq(competitions.id, input.competitionId));
+
+          // Insert all matchups in one shot; byes pre-resolve to the A-side.
+          if (bracket.matchups.length > 0) {
+            await tx.insert(battleMatchups).values(
+              bracket.matchups.map((m) => ({
+                competitionId: input.competitionId,
+                roundNumber: m.roundNumber,
+                bracketPosition: m.bracketPosition,
+                competitorAId: m.competitorAId,
+                competitorBId: m.competitorBId,
+                seedA: m.seedA,
+                seedB: m.seedB,
+                isBye: m.isBye,
+                winnerCompetitorId: m.isBye ? m.competitorAId : null,
+              })),
+            );
+          }
+
+          // Event sequence: phase.transitioned (draft → bracket), then
+          // bracket.generated. Reuses the same idempotency convention as
+          // completeCypherPhase (23505 on (aggregate_id, sequence) → re-read).
+          const [seqRow] = await tx
+            .select({ maxSeq: max(events.sequence) })
+            .from(events)
+            .where(
+              and(
+                eq(events.aggregateId, input.competitionId),
+                eq(events.aggregateType, 'competition'),
+              ),
+            );
+          const phaseSeq = (seqRow?.maxSeq ?? 0) + 1;
+          const phasePayload = {
+            competitionId: input.competitionId,
+            fromPhase: 'draft',
+            toPhase: 'bracket',
+            advancedCompetitorIds: seeds.map((s) => s.competitorId),
+            triggerType: 'admin_confirmed' as const,
+            transitionedAt: transitionedAt.toISOString(),
+          };
+          try {
+            await tx.insert(events).values({
+              type: 'phase.transitioned',
+              aggregateId: input.competitionId,
+              aggregateType: 'competition',
+              payload: phasePayload as unknown as Record<string, unknown>,
+              sequence: phaseSeq,
+              createdBy: ctx.userId,
+            });
+          } catch (err: unknown) {
+            if ((err as { code?: string }).code !== '23505') throw err;
+          }
+
+          const bracketPayload = {
+            competitionId: input.competitionId,
+            bracketSize: bracket.bracketSize,
+            qualifierCount: bracket.qualifierCount,
+            seeds,
+            matchups: bracket.matchups,
+            generatedAt: transitionedAt.toISOString(),
+          };
+          try {
+            await tx.insert(events).values({
+              type: 'bracket.generated',
+              aggregateId: input.competitionId,
+              aggregateType: 'competition',
+              payload: bracketPayload as unknown as Record<string, unknown>,
+              sequence: phaseSeq + 1,
+              createdBy: ctx.userId,
+            });
+          } catch (err: unknown) {
+            if ((err as { code?: string }).code !== '23505') throw err;
+          }
+
+          return {
+            success: true,
+            bracketSize: bracket.bracketSize,
+            qualifierCount: bracket.qualifierCount,
+            competitorCount: allCompetitors.length,
           };
         });
       }),

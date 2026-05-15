@@ -5,6 +5,7 @@ import { ParticipantsManager } from '@/components/admin/participants-manager';
 import { JudgeGroupsManager } from '@/components/admin/judge-groups-manager';
 import { JudgeLinksManager } from '@/components/admin/judge-links-manager';
 import { StartCypherPhasePanel } from '@/components/admin/start-cypher-phase-panel';
+import { StartSimpleBracketPanel } from '@/components/admin/start-simple-bracket-panel';
 import { CypherResultsPanel } from '@/components/admin/cypher-results-panel';
 import { BracketViewPanel } from '@/components/admin/bracket-view-panel';
 import { BattlesVotingPanel } from '@/components/admin/battles-voting-panel';
@@ -38,6 +39,7 @@ export default async function CompetitionConfigPage({
       <BattlesVotingPanel competitionId={id} />
       <BracketViewPanel competitionId={id} />
       <StartCypherPhasePanel competitionId={id} />
+      <StartSimpleBracketPanel competitionId={id} />
       <Tabs defaultValue="criteria">
         <TabsList>
           <TabsTrigger value="criteria">{t('tabs.criteria')}</TabsTrigger>

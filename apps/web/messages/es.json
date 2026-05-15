@@ -72,7 +72,12 @@
       "creating": "Creando…",
       "cloneSourceHint": "La configuración se clonará de {source}",
       "clonedNameDefault": "{source} (Simulación)",
-      "loadingSource": "Cargando competencia origen…"
+      "loadingSource": "Cargando competencia origen…",
+      "formatLabel": "Formato",
+      "formatCypher": "Cypher → Batallas",
+      "formatSimple": "Bracket Simple",
+      "formatCypherHint": "Calificación por grupos y luego un bracket de eliminación con los mejores puntajes.",
+      "formatSimpleHint": "Salta la calificación — todos los inscritos pasan directo a un bracket de eliminación."
     }
   },
   "Dashboard": {
@@ -247,6 +252,16 @@
     "createdOn": "Creado {date}",
     "revoke": "Revocar",
     "copyFailed": "Error al copiar al portapapeles"
+  },
+  "StartBracket": {
+    "title": "Iniciar Bracket",
+    "hint": "Genera un bracket de eliminación directa con los inscritos en orden de registro. Los byes avanzan automáticamente.",
+    "startCta": "Iniciar Bracket",
+    "starting": "Generando bracket…",
+    "loadingStatus": "Cargando estado de la competencia…",
+    "activeTitle": "Bracket Iniciado",
+    "activeBody": "El bracket está activo. Los jueces ya pueden votar las matchups en la pestaña de Batallas.",
+    "bracketSummary": "{competitors} competidores · tamaño del bracket {size}"
   },
   "StartCypher": {
     "title": "Iniciar Fase Cypher",

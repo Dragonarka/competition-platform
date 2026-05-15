@@ -4695,6 +4695,7 @@ describe('tournament.startCypherPhase solo mode', () => {
           status: 'draft',
           cypherGroupCount: soloMode ? null : 1,
           soloMode,
+          formatKind: 'cypher_battles',
         },
       ],
       [{ id: 'crit_1' }], // criteria
@@ -4776,6 +4777,7 @@ describe('tournament.startCypherPhase solo mode', () => {
           status: 'draft',
           cypherGroupCount: 5,
           soloMode: true,
+          formatKind: 'cypher_battles',
         },
       ],
       [{ id: 'crit_1' }],
@@ -6868,6 +6870,7 @@ describe('tournament.startCypherPhase (simulation mode pre-creates sim sessions)
           cypherJudgeCount: 3,
           soloMode: false,
           isSimulation: true,
+          formatKind: 'cypher_battles',
         },
       ],
       [{ id: 'crit_1' }], // criteria
@@ -6960,6 +6963,7 @@ describe('tournament.startCypherPhase live mode regression', () => {
           cypherJudgeCount: 3,
           soloMode: false,
           isSimulation: false,
+          formatKind: 'cypher_battles',
         },
       ],
       [{ id: 'crit_1' }],

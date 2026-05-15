@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+export const competitionFormatKindSchema = z.enum(['cypher_battles', 'simple_bracket']);
+export type CompetitionFormatKind = z.infer<typeof competitionFormatKindSchema>;
+
 export const createCompetitionSchema = z.object({
   name: z
     .string()
@@ -12,6 +15,9 @@ export const createCompetitionSchema = z.object({
     .max(2000, 'Description must be 2000 characters or fewer')
     .nullable()
     .optional(),
+  // Defaults to the original format. Simulations and live competitions both
+  // accept the same set; the runtime branches on this column from then on.
+  formatKind: competitionFormatKindSchema.optional(),
 });
 
 export type CreateCompetitionInput = z.infer<typeof createCompetitionSchema>;
@@ -27,6 +33,12 @@ export const createSimulationSchema = createCompetitionSchema.extend({
 });
 
 export type CreateSimulationInput = z.infer<typeof createSimulationSchema>;
+
+export const startSimpleBracketSchema = z.object({
+  competitionId: z.string().min(1, 'Competition ID is required'),
+});
+
+export type StartSimpleBracketInput = z.infer<typeof startSimpleBracketSchema>;
 
 export const startCypherPhaseSchema = z.object({
   competitionId: z.string().min(1, 'Competition ID is required'),

@@ -37,6 +37,9 @@ export function StartCypherPhasePanel({ competitionId }: { competitionId: string
 
   if (isLoading) return <p className="text-muted-foreground text-sm">{t('loadingStatus')}</p>;
   if (!competition) return null;
+  // Cypher start is only valid for the cypher_battles format. Other formats
+  // surface their own start-phase panel (e.g. StartSimpleBracketPanel).
+  if (competition.formatKind !== 'cypher_battles') return null;
 
   if (competition.status === 'active') {
     return (
