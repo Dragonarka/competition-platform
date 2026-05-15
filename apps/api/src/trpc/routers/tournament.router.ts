@@ -1019,7 +1019,13 @@ export function createTournamentRouter(
           sql`SELECT set_config('session.current_organizer_id', ${ctx.userId}, true)`,
         );
         return tx
-          .selectDistinct({ id: competitions.id, name: competitions.name })
+          .selectDistinct({
+            id: competitions.id,
+            name: competitions.name,
+            // createdAt must be in the projection because Postgres rejects
+            // SELECT DISTINCT … ORDER BY <expr> when <expr> isn't selected.
+            createdAt: competitions.createdAt,
+          })
           .from(competitions)
           .innerJoin(
             evaluationCriteria,
