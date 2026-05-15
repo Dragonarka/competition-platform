@@ -1981,6 +1981,7 @@ export function createTournamentRouter(
               cypherJudgeCount: competitions.cypherJudgeCount,
               soloMode: competitions.soloMode,
               isSimulation: competitions.isSimulation,
+              participantFormat: competitions.participantFormat,
             })
             .from(competitions)
             .where(eq(competitions.id, input.competitionId));
@@ -2027,7 +2028,11 @@ export function createTournamentRouter(
 
           // 5. Load competitors — must have at least 1
           const allCompetitors = await tx
-            .select({ id: competitors.id })
+            .select({
+              id: competitors.id,
+              role: competitors.role,
+              partnerId: competitors.partnerId,
+            })
             .from(competitors)
             .where(eq(competitors.competitionId, input.competitionId))
             .orderBy(asc(competitors.createdAt));
@@ -2038,6 +2043,21 @@ export function createTournamentRouter(
                 'At least one participant must be registered before starting',
               cause: { errorCode: ErrorCodes.NO_PARTICIPANTS_REGISTERED },
             });
+          }
+
+          // 5a. Pairs format guard — every competitor must be paired with the
+          // opposite role. Without this, partner matchups can't be generated.
+          if (comp.participantFormat === 'pairs') {
+            const unpaired = allCompetitors.filter(
+              (c) => c.role === null || c.partnerId === null,
+            );
+            if (unpaired.length > 0) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `Pairs competition has ${unpaired.length} unpaired competitor(s); every competitor needs a partner and a role before starting`,
+                cause: { errorCode: ErrorCodes.NO_PARTICIPANTS_REGISTERED },
+              });
+            }
           }
 
           // 6. Load judge sessions — must have at least groupCount sessions.
