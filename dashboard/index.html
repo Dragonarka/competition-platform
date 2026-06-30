@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Competition Platform — Infra Services Dashboard</title>
+    <style>
+      :root {
+        --bg: #0b0e14;
+        --panel: #141925;
+        --panel-2: #1b2230;
+        --border: #262e3f;
+        --text: #e6e9ef;
+        --muted: #8b95a7;
+        --accent: #6ea8fe;
+        --ok: #2ec27e;
+        --warn: #e0b341;
+        --down: #e5484d;
+        --test: #9a7bff;
+        --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: radial-gradient(1200px 600px at 80% -10%, #16203a 0%, var(--bg) 55%);
+        color: var(--text);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 64px; }
+      header.page { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+      h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+      .sub { color: var(--muted); font-size: 13px; }
+      .updated { color: var(--muted); font-size: 12px; }
+
+      .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 28px; }
+      .stat {
+        background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow);
+      }
+      .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .stat .value { font-size: 26px; font-weight: 650; margin-top: 6px; letter-spacing: -0.02em; }
+      .stat .value small { font-size: 13px; color: var(--muted); font-weight: 500; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+      .card {
+        background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 18px 18px 16px; box-shadow: var(--shadow);
+        display: flex; flex-direction: column; gap: 14px;
+      }
+      .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .name-row { display: flex; align-items: center; gap: 10px; }
+      .logo {
+        width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #fff; flex: 0 0 auto;
+      }
+      .svc-name { font-weight: 650; font-size: 15px; }
+      .svc-role { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+      .status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; }
+      .s-operational { background: rgba(46, 194, 126, 0.12); color: var(--ok); } .s-operational .dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(46,194,126,0.18); }
+      .s-degraded { background: rgba(224, 179, 65, 0.12); color: var(--warn); } .s-degraded .dot { background: var(--warn); }
+      .s-down { background: rgba(229, 72, 77, 0.12); color: var(--down); } .s-down .dot { background: var(--down); }
+
+      .pricing { background: var(--panel-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+      .plan { font-size: 13px; }
+      .plan .tier { font-weight: 650; }
+      .plan .tier .test-badge { font-size: 10px; font-weight: 700; color: var(--test); background: rgba(154,123,255,0.14); padding: 2px 6px; border-radius: 6px; margin-left: 6px; vertical-align: middle; }
+      .price { text-align: right; }
+      .price .amount { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+      .price .per { font-size: 11px; color: var(--muted); }
+      .price .next { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+      .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+      .metric { display: flex; flex-direction: column; }
+      .metric .m-label { color: var(--muted); font-size: 11px; }
+      .metric .m-value { font-size: 14px; font-weight: 600; margin-top: 1px; }
+      .bar { height: 5px; border-radius: 999px; background: var(--border); margin-top: 5px; overflow: hidden; }
+      .bar > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), #9a7bff); }
+      .bar.hi > span { background: linear-gradient(90deg, var(--warn), var(--down)); }
+
+      .card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 4px; }
+      .links a { color: var(--accent); font-size: 12px; text-decoration: none; margin-right: 12px; }
+      .links a:hover { text-decoration: underline; }
+      .region { color: var(--muted); font-size: 11px; }
+
+      footer.page { margin-top: 32px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+      footer.page code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="page">
+        <div>
+          <h1>Infra Services Dashboard</h1>
+          <div class="sub">competition-platform · third-party services · pricing, status &amp; metrics</div>
+        </div>
+        <div class="updated" id="updated"></div>
+      </header>
+
+      <section class="summary" id="summary"></section>
+      <section class="grid" id="grid"></section>
+
+      <footer class="page">
+        <strong>How to keep this current.</strong> Everything is driven by the <code>SERVICES</code> array near the
+        top of this file&rsquo;s &lt;script&gt;. Edit a service&rsquo;s <code>status</code>, <code>price</code>, or
+        <code>metrics</code> and reload — no build step. Status values: <code>operational</code> · <code>degraded</code>
+        · <code>down</code>. Prices are list prices in USD; usage-metered services (Fly, Upstash) show an estimate.
+        Metric values are placeholders until wired to each provider&rsquo;s API/console — links per card.
+      </footer>
+    </div>
+
+    <script>
+      // ─── Edit this block to keep the dashboard current ───────────────────────
+      const SERVICES = [
+        {
+          name: "Vercel",
+          role: "Web app + docs hosting · global CDN",
+          logo: { text: "▲", bg: "#000000" },
+          region: "iad1 build · global edge",
+          status: "operational",
+          plan: { tier: "Hobby", test: false },
+          price: { amount: 0, per: "/mo", next: "Pro $20/mo if commercial" },
+          links: { console: "https://vercel.com/dashboard", status: "https://www.vercel-status.com" },
+          metrics: [
+            { label: "Deployments (30d)", value: "—" },
+            { label: "Bandwidth", value: "—", pct: null },
+            { label: "Edge requests", value: "—" },
+            { label: "Build minutes", value: "—" },
+          ],
+        },
+        {
+          name: "Fly.io",
+          role: "NestJS API host",
+          logo: { text: "Fly", bg: "#8b5cf6" },
+          region: "gru · São Paulo · 2× shared-cpu-1x · 512 MB",
+          status: "operational",
+          plan: { tier: "Pay-as-you-go", test: false },
+          price: { amount: 8, per: "/mo est.", next: "~$3.88/mo per 512MB VM + bandwidth" },
+          links: { console: "https://fly.io/dashboard", status: "https://status.flyio.net" },
+          metrics: [
+            { label: "Machines", value: "2 running" },
+            { label: "Memory", value: "512 MB ea." },
+            { label: "Egress", value: "—" },
+            { label: "CPU", value: "shared-1x" },
+          ],
+        },
+        {
+          name: "Neon",
+          role: "PostgreSQL 17 (Drizzle)",
+          logo: { text: "N", bg: "#00e599" },
+          region: "us-east-1 · TODO sa-east-1",
+          status: "operational",
+          plan: { tier: "Free", test: false },
+          price: { amount: 0, per: "/mo", next: "Launch $19/mo at scale" },
+          links: { console: "https://console.neon.tech", status: "https://neonstatus.com" },
+          metrics: [
+            { label: "Storage", value: "— / 0.5 GB", pct: null },
+            { label: "Compute", value: "scale-to-zero" },
+            { label: "Branches", value: "—" },
+            { label: "Active time", value: "—" },
+          ],
+        },
+        {
+          name: "Upstash",
+          role: "Redis 7 · Socket.IO adapter + cache",
+          logo: { text: "U", bg: "#00c98d" },
+          region: "via Fly · gru",
+          status: "operational",
+          plan: { tier: "Pay-as-you-go", test: false },
+          price: { amount: 1, per: "/mo est.", next: "$0.20 per 100K commands" },
+          links: { console: "https://console.upstash.com", status: "https://status.upstash.com" },
+          metrics: [
+            { label: "Commands (30d)", value: "—" },
+            { label: "Data size", value: "—" },
+            { label: "Daily reqs", value: "— / 10K free" },
+            { label: "Bandwidth", value: "—" },
+          ],
+        },
+        {
+          name: "Clerk",
+          role: "Auth · email/password, RLS key",
+          logo: { text: "C", bg: "#6c47ff" },
+          region: "test instance · pk_test_*",
+          status: "operational",
+          plan: { tier: "Free", test: true },
+          price: { amount: 0, per: "/mo", next: "Pro $25/mo + $0.02/MAU over 10K" },
+          links: { console: "https://dashboard.clerk.com", status: "https://status.clerk.com" },
+          metrics: [
+            { label: "MAU", value: "— / 10K", pct: null },
+            { label: "Instance", value: "test" },
+            { label: "Sign-ins (30d)", value: "—" },
+            { label: "Orgs", value: "—" },
+          ],
+        },
+        {
+          name: "GitHub Actions",
+          role: "CI/CD · lint, test, build, deploy",
+          logo: { text: "GH", bg: "#24292f" },
+          region: "ubuntu-latest runners",
+          status: "operational",
+          plan: { tier: "Free (private repo)", test: false },
+          price: { amount: 0, per: "/mo", next: "2,000 min/mo incl. · $0.008/min over" },
+          links: { console: "https://github.com", status: "https://www.githubstatus.com" },
+          metrics: [
+            { label: "Minutes (30d)", value: "— / 2,000", pct: null },
+            { label: "Workflows", value: "3 active" },
+            { label: "Last run", value: "—" },
+            { label: "Storage", value: "—" },
+          ],
+        },
+      ];
+      // ─────────────────────────────────────────────────────────────────────────
+
+      const STATUS_LABEL = { operational: "Operational", degraded: "Degraded", down: "Down" };
+
+      function money(n) {
+        return n === 0 ? "$0" : "$" + (Number.isInteger(n) ? n : n.toFixed(2));
+      }
+
+      function renderSummary() {
+        const total = SERVICES.reduce((s, x) => s + (x.price.amount || 0), 0);
+        const counts = SERVICES.reduce((a, x) => ((a[x.status] = (a[x.status] || 0) + 1), a), {});
+        const allOk = (counts.operational || 0) === SERVICES.length;
+        const cards = [
+          { label: "Services tracked", value: SERVICES.length },
+          { label: "Est. monthly cost", value: money(total) + " <small>/mo</small>" },
+          {
+            label: "System status",
+            value: allOk
+              ? '<span style="color:var(--ok)">All operational</span>'
+              : `<span style="color:var(--warn)">${(counts.degraded || 0) + (counts.down || 0)} issue(s)</span>`,
+          },
+          { label: "On paid plans", value: SERVICES.filter((x) => x.price.amount > 0).length + " <small>of " + SERVICES.length + "</small>" },
+        ];
+        document.getElementById("summary").innerHTML = cards
+          .map((c) => `<div class="stat"><div class="label">${c.label}</div><div class="value">${c.value}</div></div>`)
+          .join("");
+      }
+
+      function metricHtml(m) {
+        const bar =
+          m.pct == null
+            ? ""
+            : `<div class="bar${m.pct >= 80 ? " hi" : ""}"><span style="width:${Math.min(100, m.pct)}%"></span></div>`;
+        return `<div class="metric"><span class="m-label">${m.label}</span><span class="m-value">${m.value}</span>${bar}</div>`;
+      }
+
+      function cardHtml(s) {
+        return `
+          <div class="card">
+            <div class="card-head">
+              <div class="name-row">
+                <div class="logo" style="background:${s.logo.bg}">${s.logo.text}</div>
+                <div>
+                  <div class="svc-name">${s.name}</div>
+                  <div class="svc-role">${s.role}</div>
+                </div>
+              </div>
+              <span class="status s-${s.status}"><span class="dot"></span>${STATUS_LABEL[s.status]}</span>
+            </div>
+            <div class="pricing">
+              <div class="plan"><div class="tier">${s.plan.tier}${s.plan.test ? '<span class="test-badge">TEST</span>' : ""}</div></div>
+              <div class="price">
+                <div class="amount">${money(s.price.amount)}<span class="per">${s.price.per}</span></div>
+                <div class="next">${s.price.next}</div>
+              </div>
+            </div>
+            <div class="metrics">${s.metrics.map(metricHtml).join("")}</div>
+            <div class="card-foot">
+              <div class="links">
+                <a href="${s.links.console}" target="_blank" rel="noopener">Console ↗</a>
+                <a href="${s.links.status}" target="_blank" rel="noopener">Status ↗</a>
+              </div>
+              <div class="region">${s.region}</div>
+            </div>
+          </div>`;
+      }
+
+      function render() {
+        renderSummary();
+        document.getElementById("grid").innerHTML = SERVICES.map(cardHtml).join("");
+        document.getElementById("updated").textContent =
+          "Last updated " + new Date().toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+      }
+
+      render();
+    </script>
+  </body>
+</html>
